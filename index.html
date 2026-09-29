@@ -22,6 +22,11 @@
     --text:#22282B; --text-muted:#6B7378; --accent:#D14E27; --accent-dim:#B8431F;
     --ok:#3D8256; --warn:#B8811F; --danger:#B23A30;
   }
+  .pw-rules{margin:8px 0 2px;padding:0;list-style:none;font-size:12px;color:var(--text-muted);}
+  .pw-rules li{display:flex;align-items:center;gap:8px;padding:2px 0;transition:color .15s;}
+  .pw-rules .box{width:16px;height:16px;border:1.5px solid var(--border);border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;line-height:1;color:transparent;flex-shrink:0;transition:all .15s;}
+  .pw-rules li.ok{color:var(--ok);}
+  .pw-rules li.ok .box{background:var(--ok);border-color:var(--ok);color:#fff;}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--font-body);height:100%;}
   body{padding-bottom:calc(120px + env(safe-area-inset-bottom));min-height:100vh;}
@@ -284,12 +289,34 @@ async function logAction(action, target_label){
   }catch(e){ /* non-bloquant */ }
 }
 
+/* ---------- Règles de mot de passe ---------- */
+const PW_RULES = [
+  { id:'len',   label:'8 caractères minimum',        test: p => p.length >= 8 },
+  { id:'upper', label:'Une majuscule',               test: p => /[A-Z]/.test(p) },
+  { id:'lower', label:'Une minuscule',               test: p => /[a-z]/.test(p) },
+  { id:'digit', label:'Un chiffre',                  test: p => /[0-9]/.test(p) },
+  { id:'spec',  label:'Un caractère spécial (!@#$…)', test: p => /[^A-Za-z0-9\s]/.test(p) }
+];
+function isStrongPw(p){ return PW_RULES.every(r=>r.test(p||'')); }
+function pwChecklistHtml(inputId){
+  return `<ul class="pw-rules" id="${inputId}-rules">` + PW_RULES.map(r=>`<li data-rule="${r.id}"><span class="box">✓</span>${r.label}</li>`).join('') + `</ul>`;
+}
+function updatePwRules(inputId){
+  const el = document.getElementById(inputId); const box = document.getElementById(inputId+'-rules');
+  if(!el || !box) return;
+  PW_RULES.forEach(r=>{
+    const li = box.querySelector('[data-rule="'+r.id+'"]');
+    if(li) li.classList.toggle('ok', r.test(el.value));
+  });
+}
+
 /* ---------- Auth actions ---------- */
 async function doSignUp(){
   const email = document.getElementById('au-email').value.trim();
   const password = document.getElementById('au-password').value;
   const password2 = document.getElementById('au-password2').value;
-  if(!email || password.length<8){ showToast('Email valide et mot de passe (8+ caractères) requis'); return; }
+  if(!email || !password){ showToast('Email et mot de passe requis'); return; }
+  if(!isStrongPw(password)){ showToast('Le mot de passe ne respecte pas toutes les conditions'); return; }
   if(password!==password2){ showToast('Les mots de passe ne correspondent pas'); return; }
   if(TURNSTILE_SITE_KEY!=='REMPLACE_PAR_TA_CLE_TURNSTILE' && !turnstileToken){ showToast('Merci de valider le contrôle anti-robot'); return; }
   const captchaToken = turnstileToken; turnstileToken = null; /* jeton à usage unique */
@@ -595,7 +622,8 @@ function renderAuthForm(isLogin){
     </div>
     <div class="field"><label>Email</label><input id="au-email" type="email" autocomplete="email"></div>
     <div class="field"><label>Mot de passe</label>
-      <div style="display:flex;gap:8px;"><input id="au-password" type="password" style="flex:1;" autocomplete="${isLogin?'current-password':'new-password'}"><button type="button" class="btn btn-ghost" style="width:auto;" onclick="togglePwVisibility('au-password',this)">👁</button></div>
+      <div style="display:flex;gap:8px;"><input id="au-password" type="password" style="flex:1;" autocomplete="${isLogin?'current-password':'new-password'}" ${isLogin?'':'oninput="updatePwRules(\'au-password\')"'}><button type="button" class="btn btn-ghost" style="width:auto;" onclick="togglePwVisibility('au-password',this)">👁</button></div>
+      ${isLogin?'':pwChecklistHtml('au-password')}
     </div>
     ${!isLogin?`<div class="field"><label>Confirmer le mot de passe</label>
       <div style="display:flex;gap:8px;"><input id="au-password2" type="password" style="flex:1;" autocomplete="new-password"><button type="button" class="btn btn-ghost" style="width:auto;" onclick="togglePwVisibility('au-password2',this)">👁</button></div>
@@ -1000,7 +1028,8 @@ function renderProfile(){
       <div style="display:flex;gap:8px;"><input id="pw-current" type="password" autocomplete="current-password" style="flex:1;"><button type="button" class="btn btn-ghost" style="width:auto;" onclick="togglePwVisibility('pw-current',this)">👁</button></div>
     </div>
     <div class="field"><label>Nouveau mot de passe</label>
-      <div style="display:flex;gap:8px;"><input id="pw-new" type="password" style="flex:1;"><button type="button" class="btn btn-ghost" style="width:auto;" onclick="togglePwVisibility('pw-new',this)">👁</button></div>
+      <div style="display:flex;gap:8px;"><input id="pw-new" type="password" autocomplete="new-password" style="flex:1;" oninput="updatePwRules('pw-new')"><button type="button" class="btn btn-ghost" style="width:auto;" onclick="togglePwVisibility('pw-new',this)">👁</button></div>
+      ${pwChecklistHtml('pw-new')}
     </div>
     <div class="field"><label>Confirmer le mot de passe</label>
       <div style="display:flex;gap:8px;"><input id="pw-confirm" type="password" style="flex:1;"><button type="button" class="btn btn-ghost" style="width:auto;" onclick="togglePwVisibility('pw-confirm',this)">👁</button></div>
@@ -1115,7 +1144,7 @@ async function changePassword(){
   const pw = document.getElementById('pw-new').value;
   const pw2 = document.getElementById('pw-confirm').value;
   if(!cur){ showToast('Saisis ton mot de passe actuel'); return; }
-  if(pw.length<8){ showToast('8 caractères minimum'); return; }
+  if(!isStrongPw(pw)){ showToast('Le nouveau mot de passe ne respecte pas toutes les conditions'); return; }
   if(pw!==pw2){ showToast('Les mots de passe ne correspondent pas'); return; }
   if(pw===cur){ showToast("Le nouveau mot de passe doit être différent de l'actuel"); return; }
   state.busy=true; render();
