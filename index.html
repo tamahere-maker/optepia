@@ -1,0 +1,1999 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>OPTEPIA</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="theme-color" content="#E4572E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#181D20; --surface:#20272B; --surface2:#2A3237; --border:#3A434A;
+    --text:#ECEFEF; --text-muted:#8B979E; --accent:#E4572E; --accent-dim:#B8431F;
+    --ok:#4F9D69; --warn:#D9A441; --danger:#C1443A;
+    --font-head:'Barlow Condensed',sans-serif; --font-body:'Inter',sans-serif; --font-mono:'JetBrains Mono',monospace;
+  }
+  :root[data-theme="light"]{
+    --bg:#F5F3EF; --surface:#FFFFFF; --surface2:#ECE8E1; --border:#DAD5CC;
+    --text:#22282B; --text-muted:#6B7378; --accent:#D14E27; --accent-dim:#B8431F;
+    --ok:#3D8256; --warn:#B8811F; --danger:#B23A30;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--font-body);height:100%;}
+  body{padding-bottom:calc(120px + env(safe-area-inset-bottom));min-height:100vh;}
+  h1,h2,h3{font-family:var(--font-head);font-weight:600;letter-spacing:0.2px;margin:0 0 4px 0;}
+  h1{font-size:26px;} h2{font-size:20px;} h3{font-size:16px;color:var(--text-muted);font-weight:600;}
+  p{margin:0;} a{color:var(--accent);}
+  button{font-family:var(--font-body);cursor:pointer;border:none;}
+  input,select,textarea{font-family:var(--font-body);}
+  .topbar{position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:1px solid var(--border);padding:14px 16px 12px;display:flex;align-items:center;justify-content:space-between;}
+  .topbar .brand{display:flex;flex-direction:row;align-items:center;}
+  .topbar .brand small{color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:1px;}
+  .user-chip{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:6px 12px 6px 6px;cursor:pointer;}
+  .user-dot{width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;font-family:var(--font-head);flex-shrink:0;}
+  .user-chip .role{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;display:block;}
+  .user-chip .name{font-size:13px;font-weight:600;}
+  main{padding:16px;padding-bottom:32px;max-width:640px;margin:0 auto;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:12px;}
+  .card.tap{cursor:pointer;transition:border-color .15s;}
+  .card.tap:active{border-color:var(--accent);}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:12px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;}
+  .field input,.field select,.field textarea{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:11px 12px;font-size:15px;}
+  .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--accent);}
+  .field textarea{resize:vertical;min-height:70px;}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 18px;border-radius:8px;font-size:14px;font-weight:600;width:100%;}
+  .btn-primary{background:var(--accent);color:#fff;} .btn-primary:active{background:var(--accent-dim);}
+  .btn-primary:disabled{opacity:0.5;}
+  .btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border);}
+  .btn-ghost{background:transparent;color:var(--accent);padding:10px;}
+  .btn-danger{background:transparent;color:var(--danger);border:1px solid var(--danger);}
+  .btn-row{display:flex;gap:10px;margin-top:4px;flex-wrap:wrap;}
+  .btn-row .btn{flex:1;min-width:110px;}
+  .badge{font-size:10px;text-transform:uppercase;letter-spacing:0.5px;padding:3px 8px;border-radius:20px;font-weight:700;}
+  .badge-ok{background:rgba(79,157,105,0.18);color:var(--ok);}
+  .badge-warn{background:rgba(217,164,65,0.18);color:var(--warn);}
+  .badge-danger{background:rgba(193,68,58,0.18);color:var(--danger);}
+  .mono{font-family:var(--font-mono);font-size:13px;letter-spacing:0.3px;}
+  .muted{color:var(--text-muted);font-size:13px;}
+  .thumb{width:56px;height:56px;border-radius:8px;object-fit:cover;background:var(--surface2);border:1px solid var(--border);flex-shrink:0;}
+  .thumb-lg{width:100%;height:180px;border-radius:10px;object-fit:cover;background:var(--surface2);border:1px solid var(--border);}
+  .thumb-contain{width:100%;max-height:420px;height:auto;object-fit:contain;background:var(--surface2);border-radius:10px;border:1px solid var(--border);display:block;}
+  .search{display:flex;gap:8px;margin-bottom:14px;}
+  .search input{flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px 12px;font-size:14px;}
+  .filter-chips{display:flex;gap:6px;overflow-x:auto;margin-bottom:14px;padding-bottom:2px;}
+  .chip{flex-shrink:0;padding:7px 13px;border-radius:20px;font-size:12px;font-weight:600;background:var(--surface);border:1px solid var(--border);color:var(--text-muted);}
+  .chip.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .navbar{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border);display:flex;z-index:10;padding-bottom:env(safe-area-inset-bottom);}
+  .navitem{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:9px 1px 7px;color:var(--text-muted);font-size:8.8px;text-transform:uppercase;letter-spacing:0.2px;font-weight:600;background:transparent;}
+  .navitem.active{color:var(--accent);}
+  .navitem svg{width:18px;height:18px;}
+  .empty{text-align:center;padding:50px 20px;color:var(--text-muted);}
+  .empty h3{color:var(--text-muted);}
+  .backlink{display:flex;align-items:center;gap:6px;color:var(--text-muted);font-size:13px;margin-bottom:14px;font-weight:600;}
+  .divider{height:1px;background:var(--border);margin:16px 0;}
+  .photo-picker{display:flex;gap:10px;align-items:center;}
+  .photo-picker .thumb{cursor:pointer;}
+  .control-item{border-left:2px solid var(--accent);padding:2px 0 2px 14px;margin-bottom:16px;}
+  .control-item.tap{cursor:pointer;}
+  .control-item .cdate{font-family:var(--font-head);font-size:16px;font-weight:600;}
+  canvas.sigpad{width:100%;height:150px;background:#fff;border:1px dashed var(--border);border-radius:8px;touch-action:none;}
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:20;display:flex;align-items:flex-end;}
+  .modal-sheet{background:var(--surface);border-radius:16px 16px 0 0;width:100%;max-height:88vh;overflow-y:auto;padding:20px 16px calc(20px + env(safe-area-inset-bottom));border-top:1px solid var(--border);}
+  .modal-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 16px;}
+  .role-pick{display:flex;flex-direction:column;gap:8px;margin-top:14px;}
+  .role-opt{display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:13px 14px;}
+  .qr-status{font-size:13px;padding:10px 12px;border-radius:8px;margin-bottom:12px;}
+  .qr-status.info{background:rgba(139,151,158,0.12);color:var(--text-muted);}
+  .qr-status.ok{background:rgba(79,157,105,0.15);color:var(--ok);}
+  .qr-status.err{background:rgba(193,68,58,0.15);color:var(--danger);}
+  .toast{position:fixed;bottom:84px;left:50%;transform:translateX(-50%);background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:11px 18px;border-radius:20px;font-size:13px;font-weight:600;z-index:30;box-shadow:0 6px 20px rgba(0,0,0,0.4);max-width:88vw;text-align:center;}
+  .tabs{display:flex;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:4px;margin-bottom:18px;}
+  .tab{flex:1;text-align:center;padding:10px;border-radius:7px;font-size:13px;font-weight:600;color:var(--text-muted);background:transparent;}
+  .tab.active{background:var(--accent);color:#fff;}
+  .code-display{font-family:var(--font-mono);font-size:24px;letter-spacing:4px;text-align:center;padding:14px;background:var(--surface2);border:1px dashed var(--border);border-radius:8px;margin:10px 0;}
+  .journal-item{padding:11px 0;border-bottom:1px solid var(--border);}
+  .journal-item:last-child{border-bottom:none;}
+  .spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.35);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<canvas id="workCanvas" style="display:none;"></canvas>
+<input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none;">
+<input type="file" id="pdfInput" accept="application/pdf" style="display:none;">
+<input type="file" id="csvInput" accept=".csv,text/csv" style="display:none;">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js" onerror="window.__sbLoadFailed=true;" onload="window.__sbLoaded=true;"></script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+<script>
+/* ---------- Supabase setup ---------- */
+const SUPABASE_URL = 'https://djgetorzygsanetsxlzn.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRqZ2V0b3J6eWdzYW5ldHN4bHpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkxNjUyNDcsImV4cCI6MjEwNDc0MTI0N30.YoCSv80O1Fexd9ETTh_mfNhtqI_wu6cxTxiPR_lT1kA';
+const TURNSTILE_SITE_KEY = '0x4AAAAAAFIxtzEQNiT-i15G';
+let turnstileToken = null;
+const sb = (function(){
+  try{
+    if(typeof supabase === 'undefined' || window.__sbLoadFailed){
+      throw new Error("La librairie Supabase n'a pas pu se charger (connexion réseau bloquée, contenu tiers restreint, ou navigateur qui empêche ce script). Vérifie ta connexion et réessaie, ou ouvre ce fichier dans un autre navigateur.");
+    }
+    return supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  }catch(e){
+    document.addEventListener('DOMContentLoaded', function(){
+      document.getElementById('app').innerHTML =
+        '<div style="padding:60px 24px;text-align:center;max-width:420px;margin:0 auto;color:#ECEFEF;font-family:sans-serif;">'
+        + "<h2 style=\"font-family:sans-serif;\">Impossible de charger l'application</h2>"
+        + '<p style="color:#8B979E;margin:14px 0;font-size:14px;">' + e.message + '</p>'
+        + '<button onclick="location.reload()" style="background:#E4572E;color:#fff;border:none;padding:12px 20px;border-radius:8px;font-weight:600;font-size:14px;">Réessayer</button>'
+        + '</div>';
+    });
+    if(document.readyState !== 'loading'){
+      document.getElementById('app').innerHTML =
+        '<div style="padding:60px 24px;text-align:center;max-width:420px;margin:0 auto;color:#ECEFEF;font-family:sans-serif;">'
+        + "<h2 style=\"font-family:sans-serif;\">Impossible de charger l'application</h2>"
+        + '<p style="color:#8B979E;margin:14px 0;font-size:14px;">' + e.message + '</p>'
+        + '<button onclick="location.reload()" style="background:#E4572E;color:#fff;border:none;padding:12px 20px;border-radius:8px;font-weight:600;font-size:14px;">Réessayer</button>'
+        + '</div>';
+    }
+    return null;
+  }
+})();
+const BUCKET = 'registre-materiel';
+
+/* ---- Thème clair/sombre ---- */
+(function(){
+  try{
+    if(localStorage.getItem('optepia-theme')==='light') document.documentElement.setAttribute('data-theme','light');
+  }catch(e){}
+})();
+function toggleTheme(){
+  const isLight = document.documentElement.getAttribute('data-theme')==='light';
+  if(isLight){ document.documentElement.removeAttribute('data-theme'); }
+  else { document.documentElement.setAttribute('data-theme','light'); }
+  try{ localStorage.setItem('optepia-theme', isLight?'dark':'light'); }catch(e){}
+  render();
+}
+
+/* ---------- State ---------- */
+let state = {
+  view:'loading', authMode:'login', busy:false,
+  session:null, unit:null, role:null, myMemberId:null, myDisplayName:'',
+  memberships:[], activeMembershipId:null, pendingActivateUnitId:null,
+  members:[], equipment:[], journal:[], changeRequests:[], myAvatarUrl:null, importPreview:{rows:[],errors:[]},
+  detailId:null, search:'', filter:'tous', viewMode:'flat', groupFilter:null, sortMode:'designation',
+  mfaFactorId:null, mfaChallengeId:null, mfaFactors:[], mfaEnroll:null,
+  loanTab:'pret', checkoutSelection:[], checkoutType:'pret', batchReturn:{}, controlDetailId:null,
+  setupMode:'create', qrStatus:null, toast:null, loadError:null
+};
+const ROLES = {
+  administrateur:{label:'Administrateur', can:['creerMateriel','supprimerMateriel','editerMateriel','ajouterControle','gererMembres','exporter','gererPret','validerPret','validerModificationMateriel']},
+  verificateur:{label:'Vérificateur', can:['creerMateriel','ajouterControle','gererMembres','exporter','gererPret','validerPret','proposerModificationMateriel']},
+  assistant:{label:'Assistant', can:['exporter','gererPret']},
+  lecteur:{label:'Lecteur', can:['exporter']}
+};
+function can(action){ return (ROLES[state.role]?.can || []).includes(action); }
+function uid(){ return Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4); }
+function genUUID(){
+  if(window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(ch){ const r=Math.random()*16|0; const v=ch==='x'?r:(r&0x3|0x8); return v.toString(16); });
+}
+function esc(s){ return (s||'').toString().replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function imgFallback(imgEl){
+  const url = imgEl.src;
+  const div = document.createElement('div');
+  div.className = 'muted'; div.style.fontSize='13px';
+  div.innerHTML = `Image indisponible — <a href="${esc(url)}" target="_blank" style="color:var(--accent);">ouvrir le lien</a>`;
+  imgEl.replaceWith(div);
+}
+function initials(name){ return (name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase(); }
+function showToast(msg){ state.toast=msg; render(); setTimeout(()=>{ state.toast=null; render(); }, 2400); }
+function fmtDate(d){ if(!d) return '—'; const p=(''+d).slice(0,10).split('-'); if(p.length!==3) return d; return `${p[2]}/${p[1]}/${p[0]}`; }
+function fmtDateTime(d){ if(!d) return '—'; const dt=new Date(d); return dt.toLocaleDateString('fr-FR')+' '+dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}); }
+function daysUntil(d){ if(!d) return null; const t=new Date((''+d).slice(0,10)+'T00:00:00'); const n=new Date(); n.setHours(0,0,0,0); return Math.round((t-n)/86400000); }
+function addYears(d,n){ if(!d) return null; const p=(''+d).slice(0,10).split('-').map(Number); return new Date(p[0]+n,p[1]-1,p[2]).toISOString().slice(0,10); }
+function statusOf(e){
+  const dfv = daysUntil(e.date_fin_vie);
+  if(dfv!==null && dfv<0) return {label:'Hors service', cls:'badge-danger'};
+  const controls = e.controls||[];
+  const last = controls.length ? controls.slice().sort((a,b)=>b.date.localeCompare(a.date))[0] : null;
+  if(last){
+    const dNext = daysUntil(addYears(last.date,1));
+    if(dNext!==null && dNext<0) return {label:'Contrôle dépassé', cls:'badge-danger'};
+    if(dNext!==null && dNext<30) return {label:'Contrôle proche', cls:'badge-warn'};
+  } else { return {label:'Jamais contrôlé', cls:'badge-warn'}; }
+  if(dfv!==null && dfv<60) return {label:'Fin de vie proche', cls:'badge-warn'};
+  return {label:'Conforme', cls:'badge-ok'};
+}
+function translateAuthError(msg){
+  if(!msg) return 'Erreur inconnue';
+  if(/invalid login credentials/i.test(msg)) return 'Email ou mot de passe incorrect';
+  if(/already registered|already exists/i.test(msg)) return 'Un compte existe déjà avec cet email';
+  if(/password.*(least|short)/i.test(msg)) return 'Mot de passe trop court (8 caractères minimum)';
+  if(/email not confirmed/i.test(msg)) return "Confirme d'abord ton email (lien reçu par mail)";
+  if(/captcha/i.test(msg)) return 'Captcha refusé par Supabase (' + msg + ') — vérifie la secret key Turnstile dans Supabase (Attack Protection)';
+  if(/code invalide/i.test(msg)) return 'Code invalide — vérifie-le auprès de ton administrateur';
+  return msg;
+}
+
+/* ---------- Auth & data loading ---------- */
+async function init(){
+  const { data:{ session } } = await sb.auth.getSession();
+  state.session = session;
+  sb.auth.onAuthStateChange((event, sess)=>{
+    state.session = sess;
+    if(event==='SIGNED_OUT'){ state.unit=null; state.role=null; state.view='auth'; state.authMode='login'; render(); }
+  });
+  if(!session){ state.view='auth'; render(); return; }
+  await loadUnitContext();
+}
+async function loadUnitContext(){
+  try{
+    refreshMfaFactors();
+    const { data: memberships, error } = await sb.from('unit_members').select('*, units(*)').eq('user_id', state.session.user.id);
+    if(error) throw error;
+    state.memberships = memberships || [];
+    if(state.memberships.length===0){ state.view='unitSetup'; render(); return; }
+    let target = null;
+    if(state.pendingActivateUnitId){ target = state.memberships.find(m=>m.unit_id===state.pendingActivateUnitId); state.pendingActivateUnitId=null; }
+    if(!target && state.activeMembershipId) target = state.memberships.find(m=>m.id===state.activeMembershipId);
+    if(!target && state.memberships.length===1) target = state.memberships[0];
+    if(target){ await selectMembership(target); return; }
+    state.view='unitPicker';
+  }catch(err){ state.loadError = err.message; state.view='error'; }
+  render();
+}
+async function selectMembership(m){
+  state.unit = m.units; state.role = m.role; state.myMemberId = m.id; state.myDisplayName = m.display_name; state.activeMembershipId = m.id; state.myAvatarUrl = m.avatar_url || null;
+  await refreshAll();
+  state.view='list';
+  render();
+}
+function selectMembershipById(id){ const m = state.memberships.find(x=>x.id===id); if(m) selectMembership(m); }
+async function openUnitSwitcher(){
+  const { data } = await sb.from('unit_members').select('*, units(*)').eq('user_id', state.session.user.id);
+  state.memberships = data || [];
+  state.view='unitPicker'; render();
+}
+function startJoinOrCreateAnother(){ state.setupMode='join'; state.view='unitSetup'; render(); }
+async function refreshAll(){
+  const [eqRes, memRes, crRes] = await Promise.all([
+    sb.from('equipment').select('*, controls(*), loans(*)').eq('unit_id', state.unit.id),
+    sb.from('unit_members').select('*').eq('unit_id', state.unit.id),
+    sb.from('change_requests').select('*').eq('unit_id', state.unit.id).eq('status','en_attente')
+  ]);
+  state.equipment = eqRes.data || [];
+  state.members = (memRes.data||[]).sort((a,b)=>a.display_name.localeCompare(b.display_name));
+  state.changeRequests = crRes.data || [];
+  collectAndResolveUnitFiles().then(()=>{
+    const formViews = ['addControl','addEquip','checkout','loanOut','loanReturn','batchReturn'];
+    if(!formViews.includes(state.view)) render();
+  });
+}
+async function loadJournal(){
+  const { data } = await sb.from('audit_log').select('*').eq('unit_id', state.unit.id).order('created_at', {ascending:false}).limit(80);
+  state.journal = data || [];
+}
+async function logAction(action, target_label){
+  try{
+    await sb.from('audit_log').insert({unit_id: state.unit.id, user_id: state.session.user.id, user_name: state.myDisplayName, action, target_label});
+  }catch(e){ /* non-bloquant */ }
+}
+
+/* ---------- Auth actions ---------- */
+async function doSignUp(){
+  const email = document.getElementById('au-email').value.trim();
+  const password = document.getElementById('au-password').value;
+  const password2 = document.getElementById('au-password2').value;
+  if(!email || password.length<8){ showToast('Email valide et mot de passe (8+ caractères) requis'); return; }
+  if(password!==password2){ showToast('Les mots de passe ne correspondent pas'); return; }
+  if(TURNSTILE_SITE_KEY!=='REMPLACE_PAR_TA_CLE_TURNSTILE' && !turnstileToken){ showToast('Merci de valider le contrôle anti-robot'); return; }
+  const captchaToken = turnstileToken; turnstileToken = null; /* jeton à usage unique */
+  state.busy=true; render();
+  const signUpOpts = { email, password, options: { emailRedirectTo: 'https://app.optepia.fr/confirmed.html' } };
+  if(captchaToken) signUpOpts.options.captchaToken = captchaToken;
+  const { data, error } = await sb.auth.signUp(signUpOpts);
+  state.busy=false;
+  if(error){ showToast(translateAuthError(error.message)); render(); return; }
+  if(!data.session){ state.authMode='confirmSent'; render(); return; }
+  state.session = data.session;
+  await loadUnitContext();
+}
+async function doLogin(){
+  const email = document.getElementById('au-email').value.trim();
+  const password = document.getElementById('au-password').value;
+  if(!email || !password){ showToast('Email et mot de passe requis'); return; }
+  if(TURNSTILE_SITE_KEY!=='REMPLACE_PAR_TA_CLE_TURNSTILE' && !turnstileToken){ showToast('Merci de valider le contrôle anti-robot'); return; }
+  const captchaToken = turnstileToken; turnstileToken = null; /* jeton à usage unique */
+  state.busy=true; render();
+  const loginOpts = { email, password };
+  if(captchaToken) loginOpts.options = { captchaToken };
+  const { data, error } = await sb.auth.signInWithPassword(loginOpts);
+  state.busy=false;
+  if(error){ showToast(translateAuthError(error.message)); render(); return; }
+  state.session = data.session;
+  const { data: aal } = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
+  if(aal && aal.currentLevel==='aal1' && aal.nextLevel==='aal2'){
+    const { data: factors } = await sb.auth.mfa.listFactors();
+    const factor = factors && factors.totp && factors.totp[0];
+    if(factor){ state.mfaFactorId = factor.id; state.view='mfaChallenge'; render(); return; }
+  }
+  await loadUnitContext();
+}
+async function submitMfaChallenge(){
+  const code = document.getElementById('mfa-code').value.trim();
+  if(!code){ showToast('Saisis le code à 6 chiffres'); return; }
+  state.busy=true; render();
+  const { error } = await sb.auth.mfa.challengeAndVerify({ factorId: state.mfaFactorId, code });
+  state.busy=false;
+  if(error){ showToast('Code invalide'); render(); return; }
+  state.mfaFactorId = null;
+  await loadUnitContext();
+}
+async function doLogout(){
+  await sb.auth.signOut();
+  state = Object.assign(state, {unit:null, role:null, equipment:[], members:[], journal:[], memberships:[], activeMembershipId:null, mfaFactorId:null, mfaChallengeId:null, view:'auth', authMode:'login'});
+  render();
+}
+function setAuthMode(m){ state.authMode=m; render(); }
+
+/* ---------- Unit setup ---------- */
+function setSetupMode(m){ state.setupMode=m; render(); }
+async function createUnit(){
+  const name = document.getElementById('su-name').value.trim();
+  const display = document.getElementById('su-display').value.trim();
+  if(!name || !display){ showToast("Nom d'unité et ton nom sont requis"); return; }
+  state.busy=true; render();
+  const { data, error } = await sb.rpc('create_unit', { unit_name:name, admin_display_name:display });
+  state.busy=false;
+  if(error){ showToast(error.message); render(); return; }
+  state.pendingActivateUnitId = data;
+  await loadUnitContext();
+}
+async function joinUnit(){
+  const code = document.getElementById('su-code').value.trim();
+  const display = document.getElementById('su-display2').value.trim();
+  if(!code || !display){ showToast('Code et ton nom sont requis'); return; }
+  state.busy=true; render();
+  const { data, error } = await sb.rpc('join_unit_by_code', { code, member_display_name:display });
+  state.busy=false;
+  if(error){ showToast(translateAuthError(error.message)); render(); return; }
+  state.pendingActivateUnitId = data;
+  await loadUnitContext();
+}
+
+/* ---------- Image helpers ---------- */
+function resizeDataUrl(dataUrl, maxDim, quality){
+  return new Promise((resolve)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      let w=img.width,h=img.height;
+      if(w>h && w>maxDim){ h=Math.round(h*maxDim/w); w=maxDim; } else if(h>=w && h>maxDim){ w=Math.round(w*maxDim/h); h=maxDim; }
+      const c = document.getElementById('workCanvas'); c.width=w; c.height=h;
+      const ctx = c.getContext('2d'); ctx.drawImage(img,0,0,w,h);
+      resolve(c.toDataURL('image/jpeg', quality));
+    };
+    img.src = dataUrl;
+  });
+}
+function readFile(file){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(file); }); }
+function dataUrlToBlob(dataUrl){
+  const [header, b64] = dataUrl.split(',');
+  const mime = header.match(/:(.*?);/)[1];
+  const bin = atob(b64); const arr = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+  return new Blob([arr], {type:mime});
+}
+async function uploadImage(dataUrl, path){
+  const blob = dataUrlToBlob(dataUrl);
+  const { error } = await sb.storage.from(BUCKET).upload(path, blob, {upsert:true, contentType:blob.type});
+  if(error) throw error;
+  return path;
+}
+function isExternalLink(v){ return !!v && /^https?:\/\//.test(v); }
+let signedUrlCache = {};
+async function resolveSignedUrls(paths){
+  const uniq = [...new Set((paths||[]).filter(p=>p && !isExternalLink(p)))];
+  const now = Date.now();
+  const need = uniq.filter(p=>!signedUrlCache[p] || signedUrlCache[p].expires < now + 5*60*1000);
+  if(need.length===0) return;
+  try{
+    const { data, error } = await sb.storage.from(BUCKET).createSignedUrls(need, 3600);
+    if(error) throw error;
+    (data||[]).forEach(d=>{ if(d.signedUrl) signedUrlCache[d.path] = { url: d.signedUrl, expires: now + 3600*1000 }; });
+  }catch(e){ /* silencieux : imgFallback prendra le relais à l'affichage */ }
+}
+function imgSrc(v){
+  if(!v) return '';
+  if(isExternalLink(v)) return v;
+  const cached = signedUrlCache[v];
+  return cached ? cached.url : '';
+}
+async function collectAndResolveUnitFiles(){
+  const paths = [];
+  state.equipment.forEach(e=>{
+    paths.push(e.photo_url, e.fiche_technique_url);
+    (e.controls||[]).forEach(c=>paths.push(c.photo_url, c.signature_url));
+    (e.loans||[]).forEach(l=>paths.push(l.checkout_signature_url, l.return_signature_url));
+  });
+  state.members.forEach(m=>paths.push(m.avatar_url));
+  if(state.unit) paths.push(state.unit.avatar_url);
+  await resolveSignedUrls(paths);
+}
+function decodeQrFromDataUrl(dataUrl){
+  return new Promise((resolve)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const c = document.getElementById('workCanvas');
+      function tryDecode(maxDim){
+        let w=img.width,h=img.height;
+        if(w>maxDim||h>maxDim){ if(w>h){ h=Math.round(h*maxDim/w); w=maxDim; } else { w=Math.round(w*maxDim/h); h=maxDim; } }
+        c.width=w; c.height=h; const ctx=c.getContext('2d'); ctx.drawImage(img,0,0,w,h);
+        const imgData = ctx.getImageData(0,0,w,h);
+        return (typeof jsQR==='function') ? jsQR(imgData.data,w,h,{inversionAttempts:'attemptBoth'}) : null;
+      }
+      const result = tryDecode(1600) || tryDecode(900) || tryDecode(2400);
+      resolve(result ? result.data : null);
+    };
+    img.src = dataUrl;
+  });
+}
+let photoCallback = null;
+document.getElementById('photoInput').addEventListener('change', async (e)=>{
+  const file = e.target.files[0]; e.target.value='';
+  if(!file || !photoCallback) return;
+  const raw = await readFile(file);
+  photoCallback(raw);
+});
+function pickPhoto(cb){ photoCallback = cb; document.getElementById('photoInput').click(); }
+document.getElementById('pdfInput').addEventListener('change', async (e)=>{
+  const file = e.target.files[0]; e.target.value='';
+  if(!file) return;
+  syncEquipDraftFromDom();
+  showToast('Téléversement du PDF…');
+  try{
+    const path = `${state.unit.id}/datasheets/${uid()}.pdf`;
+    const { error } = await sb.storage.from(BUCKET).upload(path, file, {upsert:true, contentType:'application/pdf'});
+    if(error) throw error;
+    const { data } = sb.storage.from(BUCKET).getPublicUrl(path);
+    equipDraft.fiche_technique_url = data.publicUrl;
+    render();
+    showToast('PDF ajouté à la fiche');
+  }catch(err){ showToast(err.message); }
+});
+function pickDatasheet(){ document.getElementById('pdfInput').click(); }
+const EQUIP_FIELD_MAP = {
+  'f-designation':'designation','f-marque':'marque','f-numeroSerie':'numero_serie','f-identification':'identification',
+  'f-dateFabrication':'date_fabrication','f-datePremiereUtilisation':'date_premiere_utilisation','f-dateFinVie':'date_fin_vie',
+  'f-famille':'famille','f-sousFamille':'sous_famille','f-ficheTechnique':'fiche_technique_url'
+};
+function syncEquipDraftFromDom(){
+  Object.keys(EQUIP_FIELD_MAP).forEach(id=>{ const el=document.getElementById(id); if(el) equipDraft[EQUIP_FIELD_MAP[id]] = el.value; });
+}
+const CONTROL_FIELD_MAP = {'c-date':'date','c-verificateur':'verificateur','c-statut':'statut','c-observations':'observations'};
+function syncControlDraftFromDom(){
+  Object.keys(CONTROL_FIELD_MAP).forEach(id=>{ const el=document.getElementById(id); if(el) controlDraft[CONTROL_FIELD_MAP[id]] = el.value; });
+}
+
+/* ---------- Drafts ---------- */
+let equipDraft = {}; let controlDraft = {};
+let sigCanvas=null, sigCtx=null, sigDrawing=false, sigEmpty=true;
+function newEquipDraft(){ equipDraft = {designation:'',marque:'',date_fabrication:'',date_premiere_utilisation:'',numero_serie:'',identification:'',date_fin_vie:'',famille:'',sous_famille:'',fiche_technique_url:'',photo:null,photo_url:null}; }
+function newControlDraft(){ controlDraft = {date:new Date().toISOString().slice(0,10), verificateur:state.myDisplayName, observations:'', photo:null, statut:'conforme'}; }
+
+/* ---------- Render ---------- */
+function render(){
+  const app = document.getElementById('app');
+  let html = '';
+  if(state.view==='loading'){
+    html = `<div style="padding:70px 20px;text-align:center;color:var(--text-muted);">Chargement du registre…</div>`;
+  } else if(state.view==='error'){
+    html = `<div style="padding:60px 24px;text-align:center;max-width:420px;margin:0 auto;">
+      <h2>Impossible de charger le registre</h2>
+      <p class="muted" style="margin:10px 0 22px;">${esc(state.loadError||'Erreur inconnue.')}</p>
+      <button class="btn btn-primary" onclick="location.reload()">Réessayer</button>
+    </div>`;
+  } else if(state.view==='auth'){
+    html = renderAuth();
+  } else if(state.view==='mfaChallenge'){
+    html = renderMfaChallenge();
+  } else if(state.view==='unitSetup'){
+    html = renderUnitSetup();
+  } else if(state.view==='unitPicker'){
+    html = renderUnitPicker();
+  } else {
+    html = renderTopbar() + '<main>' + renderView() + '</main>' + renderNav();
+  }
+  if(state.toast) html += `<div class="toast">${esc(state.toast)}</div>`;
+  app.innerHTML = html;
+  afterRender();
+}
+function renderTopbar(){
+  return `
+  <div class="topbar">
+    <div>
+      <div class="brand" onclick="openUnitSwitcher()" style="cursor:pointer;gap:10px;">
+        ${state.unit.avatar_url?`<img src="${imgSrc(state.unit.avatar_url)}" onerror="imgFallback(this)" style="width:36px;height:36px;border-radius:8px;object-fit:cover;flex-shrink:0;">`:''}
+        <h2 style="margin:0;line-height:36px;">${esc(state.unit.name)}</h2>
+      </div>
+      <small style="color:var(--text-muted);font-size:11px;">${esc(ROLES[state.role].label)} · changer d'unité</small>
+    </div>
+  </div>`;
+}
+function renderNav(){
+  const v = state.view;
+  const ic = p=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+  return `
+  <div class="navbar">
+    <button class="navitem ${v==='list'?'active':''}" onclick="goto('list')">${ic('<rect x="3" y="4" width="18" height="4" rx="1"/><rect x="3" y="10" width="18" height="4" rx="1"/><rect x="3" y="16" width="18" height="4" rx="1"/>')}Matériel</button>
+    ${can('creerMateriel') ? `<button class="navitem ${v==='addEquip'?'active':''}" onclick="startAddEquip()">${ic('<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>')}Ajouter</button>` : ''}
+    <button class="navitem ${v==='export'?'active':''}" onclick="goto('export')">${ic('<path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/>')}Export</button>
+    <button class="navitem ${v==='loans'||v==='checkout'||v==='batchReturn'?'active':''}" onclick="goto('loans')">${ic('<path d="M20 7h-9M14 17H5M17 3l4 4-4 4M7 13l-4 4 4 4"/>')}Prêt</button>
+    <button class="navitem ${v==='journal'?'active':''}" onclick="openJournal()">${ic('<path d="M4 19V5a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M9 9h6M9 13h6M9 17h3"/>')}Journal</button>
+    <button class="navitem ${v==='profile'?'active':''}" onclick="goto('profile')">${ic('<circle cx="12" cy="8" r="3.5"/><path d="M5 20c1.5-4 5-5.5 7-5.5S17.5 16 19 20"/>')}Profil</button>
+  </div>`;
+}
+function renderView(){
+  switch(state.view){
+    case 'list': return renderList();
+    case 'trash': return renderTrash();
+    case 'detail': return renderDetail();
+    case 'controlDetail': return renderControlDetailView();
+    case 'addEquip': return renderAddEquip();
+    case 'addControl': return renderAddControl();
+    case 'loanOut': return renderLoanOut();
+    case 'loanReturn': return renderLoanReturn();
+    case 'loans': return renderLoansTab();
+    case 'batchDetail': return renderBatchDetailView();
+    case 'checkout': return renderCheckout();
+    case 'batchReturn': return renderBatchReturn();
+    case 'profile': return renderProfile();
+    case 'transferOwnership': return renderTransferOwnership();
+    case 'journal': return renderJournalView();
+    case 'export': return renderExport();
+    case 'importPreview': return renderImportPreview();
+    case 'approvals': return renderApprovals();
+    default: return '';
+  }
+}
+
+/* ---- Auth screens ---- */
+function renderAuth(){
+  if(state.authMode==='confirmSent'){
+    return `
+    <div style="padding:70px 24px;max-width:420px;margin:0 auto;text-align:center;">
+      <h1 style="font-size:26px;">Vérifie ta boîte mail</h1>
+      <p class="muted" style="margin:14px 0 22px;">Un lien de confirmation vient d'être envoyé. Clique dessus, puis reviens ici pour te connecter.</p>
+      <button class="btn btn-secondary" onclick="setAuthMode('login')">Retour à la connexion</button>
+    </div>`;
+  }
+  const isLogin = state.authMode==='login';
+  return renderAuthForm(isLogin);
+}
+function renderMfaChallenge(){
+  return `
+  <div style="padding:70px 24px;max-width:400px;margin:0 auto;">
+    <h1 style="font-size:24px;">Code de vérification</h1>
+    <p class="muted" style="margin-bottom:22px;">Ouvre ton application d'authentification et saisis le code à 6 chiffres.</p>
+    <div class="field"><input id="mfa-code" inputmode="numeric" maxlength="6" placeholder="123456" style="text-align:center;font-size:22px;letter-spacing:6px;"></div>
+    <button class="btn btn-primary" ${state.busy?'disabled':''} onclick="submitMfaChallenge()">${state.busy?'<span class="spinner"></span>':'Valider'}</button>
+    <button class="btn btn-ghost" style="margin-top:10px;" onclick="doLogout()">Annuler</button>
+  </div>`;
+}
+function renderAuthForm(isLogin){
+  return `
+  <div style="padding:56px 24px 24px;max-width:420px;margin:0 auto;">
+    <h1 style="font-size:28px;">OPTEPIA</h1>
+    <p class="muted" style="margin-bottom:26px;">Suivi du matériel de franchissement opérationnel.</p>
+    <div class="tabs">
+      <button class="tab ${isLogin?'active':''}" onclick="setAuthMode('login')">Connexion</button>
+      <button class="tab ${!isLogin?'active':''}" onclick="setAuthMode('signup')">Créer un compte</button>
+    </div>
+    <div class="field"><label>Email</label><input id="au-email" type="email" autocomplete="email"></div>
+    <div class="field"><label>Mot de passe</label>
+      <div style="display:flex;gap:8px;"><input id="au-password" type="password" style="flex:1;" autocomplete="${isLogin?'current-password':'new-password'}"><button type="button" class="btn btn-ghost" style="width:auto;" onclick="togglePwVisibility('au-password',this)">👁</button></div>
+    </div>
+    ${!isLogin?`<div class="field"><label>Confirmer le mot de passe</label>
+      <div style="display:flex;gap:8px;"><input id="au-password2" type="password" style="flex:1;" autocomplete="new-password"><button type="button" class="btn btn-ghost" style="width:auto;" onclick="togglePwVisibility('au-password2',this)">👁</button></div>
+    </div>`:''}
+    ${TURNSTILE_SITE_KEY!=='REMPLACE_PAR_TA_CLE_TURNSTILE'?`<div class="cf-turnstile" data-theme="dark" style="margin-bottom:14px;"></div>`:''}
+    <button class="btn btn-primary" ${state.busy?'disabled':''} onclick="${isLogin?'doLogin()':'doSignUp()'}">${state.busy?'<span class="spinner"></span>':(isLogin?'Se connecter':'Créer mon compte')}</button>
+  </div>`;
+}
+function togglePwVisibility(id, btn){
+  const el = document.getElementById(id);
+  if(!el) return;
+  if(el.type==='password'){ el.type='text'; btn.textContent='🙈'; } else { el.type='password'; btn.textContent='👁'; }
+}
+
+/* ---- Unit setup screen ---- */
+function renderUnitPicker(){
+  return `
+  <div style="padding:56px 24px 24px;max-width:420px;margin:0 auto;">
+    <h1 style="font-size:24px;">Tes unités</h1>
+    <p class="muted" style="margin-bottom:20px;">${state.memberships.length>1?'Choisis celle à afficher.':'Tu peux rejoindre ou créer une autre unité.'}</p>
+    <div class="role-pick">
+      ${state.memberships.map(m=>`
+        <div class="role-opt" style="cursor:pointer;" onclick="selectMembershipById('${m.id}')">
+          <div class="row" style="width:100%;">
+            <div><div style="font-weight:600;font-size:14px;">${esc(m.units.name)}</div><div class="muted" style="font-size:12px;">${esc(ROLES[m.role].label)}</div></div>
+            <span class="muted">›</span>
+          </div>
+        </div>`).join('')}
+    </div>
+    <button class="btn btn-ghost" style="margin-top:14px;" onclick="startJoinOrCreateAnother()">+ Rejoindre ou créer une autre unité</button>
+    ${state.unit?`<button class="btn btn-ghost" onclick="selectMembershipById('${state.activeMembershipId}')">‹ Annuler</button>`:''}
+    <button class="btn btn-ghost" onclick="doLogout()">Se déconnecter</button>
+  </div>`;
+}
+function renderUnitSetup(){
+  const isCreate = state.setupMode==='create';
+  return `
+  <div style="padding:56px 24px 24px;max-width:420px;margin:0 auto;">
+    ${state.memberships.length>0?`<div class="backlink" onclick="state.view='unitPicker'; render();">‹ Retour à mes unités</div>`:''}
+    <h1 style="font-size:24px;">Une dernière étape</h1>
+    <p class="muted" style="margin-bottom:22px;">Crée ton unité, ou rejoins celle de ton équipe avec un code.</p>
+    <div class="tabs">
+      <button class="tab ${isCreate?'active':''}" onclick="setSetupMode('create')">Créer une unité</button>
+      <button class="tab ${!isCreate?'active':''}" onclick="setSetupMode('join')">Rejoindre</button>
+    </div>
+    ${isCreate ? `
+    <div class="field"><label>Nom de l'unité</label><input id="su-name" placeholder="Ex. GRIMP 27, Section alpinisme…"></div>
+    <div class="field"><label>Ton nom</label><input id="su-display" placeholder="Prénom Nom"></div>
+    <button class="btn btn-primary" ${state.busy?'disabled':''} onclick="createUnit()">${state.busy?'<span class="spinner"></span>':"Créer l'unité (tu seras administrateur)"}</button>
+    ` : `
+    <div class="field"><label>Code d'invitation</label><input id="su-code" class="mono" style="text-transform:uppercase;" placeholder="EX : A1B2C3"></div>
+    <div class="field"><label>Ton nom</label><input id="su-display2" placeholder="Prénom Nom"></div>
+    <button class="btn btn-primary" ${state.busy?'disabled':''} onclick="joinUnit()">${state.busy?'<span class="spinner"></span>':"Rejoindre l'unité"}</button>
+    <p class="muted" style="margin-top:14px;">Le code t'est communiqué par l'administrateur de ton unité (visible dans l'onglet Équipe).</p>
+    `}
+  </div>`;
+}
+
+/* ---- List / detail ---- */
+function equipCounts(){
+  const active = state.equipment.filter(e=>!e.deleted_at);
+  const c={tous:active.length,conforme:0,attention:0,horsService:0};
+  active.forEach(e=>{ const s=statusOf(e); if(s.cls==='badge-ok')c.conforme++; else if(s.cls==='badge-warn')c.attention++; else c.horsService++; });
+  return c;
+}
+function groupKey(e){ return [e.famille||'Sans famille', e.sous_famille||'', e.designation||'', e.marque||''].join('¦'); }
+function nextControlDueDays(e){
+  const controls = e.controls||[];
+  const last = controls.length? controls.slice().sort((a,b)=>b.date.localeCompare(a.date))[0] : null;
+  if(!last) return -999999;
+  return daysUntil(addYears(last.date,1));
+}
+function urgencyScore(e){ const s=statusOf(e).cls; return s==='badge-danger'?0:s==='badge-warn'?1:2; }
+function renderList(){
+  const c = equipCounts();
+  const pendingLoanCount = can('validerPret') ? Object.keys(groupLoansByBatch(allLoans().filter(l=>l.status==='en_attente'))).length : 0;
+  const pendingChangeCount = can('validerModificationMateriel') ? state.changeRequests.length : 0;
+  const totalPending = pendingLoanCount + pendingChangeCount;
+  const trashCount = state.equipment.filter(e=>e.deleted_at).length;
+  const header = `
+  ${totalPending>0?`<div class="card tap" style="border-color:var(--warn);margin-bottom:14px;" onclick="goto('approvals')"><div class="row"><b style="color:var(--warn);">⚠ ${totalPending} validation${totalPending>1?'s':''} en attente</b><span class="muted">›</span></div></div>`:''}
+  ${c.attention>0?`<div class="card tap" style="margin-bottom:14px;" onclick="setFilter('attention')"><div class="row"><b style="color:var(--warn);">🔧 ${c.attention} matériel${c.attention>1?'s':''} à contrôler bientôt</b><span class="muted">›</span></div></div>`:''}
+  <div class="search"><input id="search-input" placeholder="Rechercher désignation, marque, n° série…" value="${esc(state.search)}" oninput="onSearchInput(this.value)"></div>
+  <div class="filter-chips">
+    <button class="chip ${state.filter==='tous'?'active':''}" onclick="setFilter('tous')">Tous · ${c.tous}</button>
+    <button class="chip ${state.filter==='conforme'?'active':''}" onclick="setFilter('conforme')">Conforme · ${c.conforme}</button>
+    <button class="chip ${state.filter==='attention'?'active':''}" onclick="setFilter('attention')">À surveiller · ${c.attention}</button>
+    <button class="chip ${state.filter==='horsService'?'active':''}" onclick="setFilter('horsService')">Hors service · ${c.horsService}</button>
+    <button class="chip ${state.viewMode==='grouped'?'active':''}" onclick="toggleGroupMode()">${state.viewMode==='grouped'?'✓ ':''}Regrouper par type</button>
+    <button class="chip ${state.sortMode==='urgence'?'active':''}" onclick="toggleSortMode()">${state.sortMode==='urgence'?'✓ ':''}Trier par urgence</button>
+    ${can('creerMateriel')?`<button class="chip" onclick="goto('trash')">🗑 Corbeille${trashCount>0?' · '+trashCount:''}</button>`:''}
+  </div>
+  <div id="equip-results">${renderListResults()}</div>`;
+  return header;
+}
+function toggleSortMode(){ state.sortMode = state.sortMode==='urgence' ? 'designation' : 'urgence'; render(); }
+function onSearchInput(v){
+  state.search = v;
+  const el = document.getElementById('equip-results');
+  if(el) el.innerHTML = renderListResults();
+}
+function renderListResults(){
+  const q = state.search.toLowerCase();
+  let items = state.equipment.filter(e=>{
+    if(e.deleted_at) return false;
+    if(q && !(`${e.designation} ${e.marque} ${e.numero_serie} ${e.identification}`.toLowerCase().includes(q))) return false;
+    if(state.filter==='conforme') return statusOf(e).cls==='badge-ok';
+    if(state.filter==='attention') return statusOf(e).cls==='badge-warn';
+    if(state.filter==='horsService') return statusOf(e).cls==='badge-danger';
+    return true;
+  }).slice().sort((a,b)=>{
+    if(state.sortMode==='urgence'){
+      const d = urgencyScore(a)-urgencyScore(b);
+      if(d!==0) return d;
+      return nextControlDueDays(a)-nextControlDueDays(b);
+    }
+    return (a.designation||'').localeCompare(b.designation||'');
+  });
+  if(items.length===0){
+    return `<div class="empty"><h3>Aucun matériel</h3><p>${can('creerMateriel')?"Ajoute une première fiche depuis l'onglet « Ajouter ».":'Aucune fiche pour le moment.'}</p></div>`;
+  }
+  if(state.viewMode==='grouped' && !state.groupFilter){
+    const groups = {};
+    items.forEach(e=>{ const k=groupKey(e); (groups[k]=groups[k]||[]).push(e); });
+    return Object.keys(groups).sort().map(k=>{
+      const g = groups[k]; const first = g[0];
+      const worst = g.some(e=>statusOf(e).cls==='badge-danger') ? 'badge-danger' : g.some(e=>statusOf(e).cls==='badge-warn') ? 'badge-warn' : 'badge-ok';
+      const worstLabel = worst==='badge-danger'?'À vérifier':worst==='badge-warn'?'À surveiller':'Conforme';
+      return `
+      <div class="card tap" onclick="state.groupFilter='${k.replace(/'/g,"\\'")}'; render();">
+        <div class="row">
+          <div class="row" style="gap:12px;">
+            ${first.photo_url?`<img class="thumb" src="${imgSrc(first.photo_url)}">`:`<div class="thumb"></div>`}
+            <div>
+              <div style="font-weight:600;font-size:15px;">${esc(first.designation)||'Sans désignation'}</div>
+              <div class="muted">${esc(first.marque)||'—'}${first.famille?' · '+esc(first.famille):''}${first.sous_famille?' · '+esc(first.sous_famille):''}</div>
+            </div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-family:var(--font-head);font-size:20px;font-weight:700;">${g.length}</div>
+            <span class="badge ${worst}" style="margin-top:2px;">${worstLabel}</span>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  if(state.groupFilter){
+    const filtered = items.filter(e=>groupKey(e)===state.groupFilter);
+    return `<div class="backlink" onclick="state.groupFilter=null; render();">‹ Retour aux types de matériel</div>` + filtered.map(renderEquipRow).join('');
+  }
+  return items.map(renderEquipRow).join('');
+}
+function toggleGroupMode(){ state.viewMode = state.viewMode==='grouped' ? 'flat' : 'grouped'; state.groupFilter=null; render(); }
+function renderEquipRow(e){
+  const s = statusOf(e);
+  const onLoan = (e.loans||[]).some(l=>l.status==='en_cours');
+  const onPending = (e.loans||[]).some(l=>l.status==='en_attente');
+  return `
+  <div class="card tap" onclick="openDetail('${e.id}')">
+    <div class="row">
+      <div class="row" style="gap:12px;">
+        ${e.photo_url ? `<img class="thumb" src="${imgSrc(e.photo_url)}">` : `<div class="thumb"></div>`}
+        <div>
+          <div style="font-weight:600;font-size:15px;">${esc(e.designation)||'Sans désignation'}</div>
+          <div class="muted">${esc(e.marque)||'—'}</div>
+          <div class="mono muted" style="margin-top:2px;">${esc(e.numero_serie)||'—'}</div>
+        </div>
+      </div>
+      <div style="text-align:right;">
+        <span class="badge ${s.cls}">${s.label}</span>
+        ${onLoan?'<div class="badge badge-warn" style="margin-top:4px;">Prêté</div>':onPending?'<div class="badge badge-warn" style="margin-top:4px;">Réservé</div>':''}
+      </div>
+    </div>
+  </div>`;
+}
+function renderDetail(){
+  const e = state.equipment.find(x=>x.id===state.detailId);
+  if(!e) return `<div class="empty">Fiche introuvable.</div>`;
+  const s = statusOf(e);
+  const controls = (e.controls||[]).slice().sort((a,b)=>b.date.localeCompare(a.date));
+  return `
+  <div class="backlink" onclick="goto('list')">‹ Retour à la liste</div>
+  <div class="card">
+    ${e.photo_url ? `<img class="thumb-lg" src="${imgSrc(e.photo_url)}" style="margin-bottom:14px;" onerror="imgFallback(this)">` : ''}
+    <div class="row" style="align-items:flex-start;"><h2>${esc(e.designation)||'Sans désignation'}</h2><span class="badge ${s.cls}">${s.label}</span></div>
+    <p class="muted" style="margin-bottom:14px;">${esc(e.marque)||'—'}</p>
+    <div class="divider"></div>
+    ${(e.famille||e.sous_famille)?`<div class="row"><div class="field" style="flex:1;"><label>Famille</label><p>${esc(e.famille)||'—'}</p></div><div class="field" style="flex:1;"><label>Sous-famille</label><p>${esc(e.sous_famille)||'—'}</p></div></div>`:''}
+    <div class="field"><label>N° de série</label><p class="mono">${esc(e.numero_serie)||'—'}</p></div>
+    <div class="field"><label>Identification</label><p class="mono">${esc(e.identification)||'—'}</p></div>
+    <div class="row"><div class="field" style="flex:1;"><label>Fabrication</label><p>${fmtDate(e.date_fabrication)}</p></div><div class="field" style="flex:1;"><label>1ère utilisation</label><p>${fmtDate(e.date_premiere_utilisation)}</p></div></div>
+    <div class="field"><label>Fin de vie</label><p>${fmtDate(e.date_fin_vie)}</p></div>
+    <p class="muted" style="font-size:11px;">Créé par ${esc(e.created_by_name||'?')} · Modifié par ${esc(e.updated_by_name||e.created_by_name||'?')}</p>
+    ${e.fiche_technique_url ? `<a href="${esc(e.fiche_technique_url)}" target="_blank" rel="noopener" class="btn btn-secondary" style="margin-top:10px;text-decoration:none;">📄 Voir la fiche technique</a>` : ''}
+    ${(function(){ const cr = state.changeRequests.find(c=>c.equipment_id===e.id); return cr ? `<div class="qr-status info" style="margin-top:10px;">${cr.type==='delete'?'Suppression':'Modification'} proposée par ${esc(cr.proposed_by_name)} — en attente de validation${can('validerModificationMateriel')?' (voir plus bas)':''}.</div>${can('validerModificationMateriel')?`<div class="btn-row"><button class="btn btn-primary" onclick="approveChangeRequest('${cr.id}')">Valider</button><button class="btn btn-danger" onclick="rejectChangeRequest('${cr.id}')">Refuser</button></div>`:''}` : ''; })()}
+    ${can('editerMateriel')||can('supprimerMateriel')||can('creerMateriel')||can('proposerModificationMateriel') ? `<div class="btn-row" style="flex-wrap:wrap;margin-top:10px;">
+      ${can('editerMateriel')?`<button class="btn btn-secondary" onclick="editEquip('${e.id}')">Modifier</button>`:can('proposerModificationMateriel')?`<button class="btn btn-secondary" onclick="editEquip('${e.id}')">Proposer une modif.</button>`:''}
+      ${can('creerMateriel')?`<button class="btn btn-secondary" onclick="duplicateEquip('${e.id}')">Dupliquer</button>`:''}
+      ${can('supprimerMateriel')?`<button class="btn btn-danger" onclick="deleteEquip('${e.id}')">Supprimer</button>`:can('proposerModificationMateriel')?`<button class="btn btn-danger" onclick="proposeDeleteEquip('${e.id}')">Proposer suppression</button>`:''}
+    </div>`:''}
+  </div>
+
+  <h3 style="color:var(--text);font-size:17px;margin:20px 0 10px;">Prêt</h3>
+  ${renderLoanSection(e)}
+
+  <h3 style="color:var(--text);font-size:17px;margin:20px 0 10px;">Historique des contrôles</h3>
+  ${can('ajouterControle')?`<button class="btn btn-primary" style="margin-bottom:16px;" onclick="startAddControl('${e.id}')">+ Ajouter un contrôle annuel</button>`:''}
+  ${controls.length===0?'<p class="muted">Aucun contrôle enregistré.</p>':controls.map(renderControl).join('')}
+  `;
+}
+function renderLoanSection(e){
+  const loans = (e.loans||[]).slice().sort((a,b)=>(b.checkout_date||'').localeCompare(a.checkout_date||''));
+  const current = loans.find(l=>l.status==='en_cours');
+  const past = loans.filter(l=>l.status!=='en_cours');
+  let html = '';
+  if(current){
+    html += `
+    <div class="card">
+      <p><b>En prêt à ${esc(current.borrower_name)}</b></p>
+      <p class="muted" style="margin-top:4px;">Perçu le ${fmtDate(current.checkout_date)}${current.expected_return_date?' · retour prévu le '+fmtDate(current.expected_return_date):''}</p>
+      ${can('gererPret')?`<button class="btn btn-primary" style="margin-top:12px;" onclick="startLoanReturn('${e.id}','${current.id}')">Marquer comme restitué</button>`:''}
+    </div>`;
+  } else if(can('gererPret')){
+    html += `<button class="btn btn-secondary" style="margin-bottom:12px;" onclick="startLoanOut('${e.id}')">Prêter ce matériel</button>`;
+  } else {
+    html += `<p class="muted">Disponible.</p>`;
+  }
+  if(past.length){
+    html += past.map(l=>`
+      <div class="control-item">
+        <div class="row"><span class="cdate">${esc(l.borrower_name)}</span><span class="badge ${l.return_condition==='endommage'?'badge-danger':l.return_condition==='reserve'?'badge-warn':'badge-ok'}">${l.return_condition==='endommage'?'Endommagé':l.return_condition==='reserve'?'Avec réserve':'Bon état'}</span></div>
+        <p class="muted" style="margin:4px 0;">Perçu le ${fmtDate(l.checkout_date)} · restitué le ${fmtDate(l.return_date)} par ${esc(l.returned_by_name||l.borrower_name)}</p>
+        ${l.return_signature_url?`<img src="${imgSrc(l.return_signature_url)}" style="height:36px;background:#fff;border-radius:4px;">`:''}
+      </div>`).join('');
+  }
+  return html;
+}
+function renderControl(c){
+  const b = c.statut==='conforme'?'<span class="badge badge-ok">Conforme</span>':c.statut==='reserve'?'<span class="badge badge-warn">Avec réserve</span>':'<span class="badge badge-danger">Réformé</span>';
+  return `
+  <div class="control-item tap" onclick="openControlDetail('${c.id}')">
+    <div class="row"><span class="cdate">${fmtDate(c.date)}</span>${b}</div>
+    <p class="muted" style="margin:4px 0;">Vérificateur : ${esc(c.verificateur_name)}</p>
+    ${c.observations?`<p style="font-size:14px;margin-bottom:8px;">${esc(c.observations)}</p>`:''}
+    <div class="row" style="gap:10px;justify-content:flex-start;">
+      ${c.photo_url?`<img class="thumb" src="${imgSrc(c.photo_url)}">`:''}
+      ${c.signature_url?`<div><div class="muted" style="font-size:11px;margin-bottom:3px;">Signature</div><img src="${imgSrc(c.signature_url)}" style="height:40px;background:#fff;border-radius:4px;"></div>`:''}
+    </div>
+  </div>`;
+}
+function openControlDetail(controlId){ state.controlDetailId = controlId; state.view='controlDetail'; render(); }
+function renderControlDetailView(){
+  const e = state.equipment.find(x=>x.id===state.detailId);
+  const c = e ? (e.controls||[]).find(x=>x.id===state.controlDetailId) : null;
+  if(!c) return `<div class="empty">Contrôle introuvable.</div>`;
+  const b = c.statut==='conforme'?'<span class="badge badge-ok">Conforme</span>':c.statut==='reserve'?'<span class="badge badge-warn">Avec réserve</span>':'<span class="badge badge-danger">Réformé</span>';
+  return `
+  <div class="backlink" onclick="state.view='detail'; render();">‹ Retour à la fiche</div>
+  <h2>Contrôle du ${fmtDate(c.date)}</h2>
+  <p class="muted" style="margin-bottom:16px;">${esc(e?e.designation:'')} ${e&&e.numero_serie?'· <span class="mono">'+esc(e.numero_serie)+'</span>':''}</p>
+  <div class="card">
+    <div class="row" style="margin-bottom:12px;"><h3 style="color:var(--text);">Statut</h3>${b}</div>
+    <div class="field"><label>Vérificateur</label><p>${esc(c.verificateur_name)}</p></div>
+    <div class="field"><label>Observations</label><p style="white-space:pre-wrap;">${c.observations?esc(c.observations):'—'}</p></div>
+    ${c.photo_url?`<div class="field"><label>Photo</label><img class="thumb-contain" src="${imgSrc(c.photo_url)}" onerror="imgFallback(this)"></div>`:''}
+    <div class="field"><label>Signature du vérificateur</label>
+      ${c.signature_url?`<img src="${imgSrc(c.signature_url)}" onerror="imgFallback(this)" style="width:100%;max-width:340px;display:block;background:#fff;border-radius:8px;border:1px solid var(--border);padding:10px;">`:'<p class="muted">Aucune signature.</p>'}
+    </div>
+  </div>
+  `;
+}
+
+/* ---- Add / edit equipment ---- */
+function distinctValues(field){ return [...new Set(state.equipment.map(e=>e[field]).filter(Boolean))]; }
+function renderAddEquip(){
+  const editing = !!equipDraft._editId;
+  return `
+  <div class="backlink" onclick="cancelAddEquip()">‹ Annuler</div>
+  <h2>${editing?'Modifier la fiche':'Nouvelle fiche matériel'}</h2>
+  ${equipDraft._duplicateNote?`<div class="qr-status info">Dupliqué depuis « ${esc(equipDraft._duplicateNote)} » — vérifie le n° de série et l'identification.</div>`:''}
+  <div class="card">
+    <div class="field"><label>Photo de l'article</label>
+      <div class="photo-picker">
+        ${equipDraft.photo||equipDraft.photo_url?`<img class="thumb" src="${equipDraft.photo||imgSrc(equipDraft.photo_url)}" onclick="pickEquipPhoto()">`:`<div class="thumb" style="display:flex;align-items:center;justify-content:center;cursor:pointer;" onclick="pickEquipPhoto()">📷</div>`}
+        <button class="btn btn-ghost" style="width:auto;" onclick="pickEquipPhoto()">${equipDraft.photo||equipDraft.photo_url?'Changer la photo':'Prendre une photo'}</button>
+      </div>
+    </div>
+    <div class="field"><label>Désignation</label><input id="f-designation" value="${esc(equipDraft.designation)}" placeholder="Ex. Baudrier, corde, mousqueton…"></div>
+    <div class="field"><label>Marque</label><input id="f-marque" value="${esc(equipDraft.marque)}"></div>
+    <div class="row" style="gap:10px;align-items:flex-start;">
+      <div class="field" style="flex:1;"><label>Famille</label><input id="f-famille" list="famille-list" value="${esc(equipDraft.famille)}" placeholder="Métallique, Textile…"></div>
+      <div class="field" style="flex:1;"><label>Sous-famille</label><input id="f-sousFamille" list="sousfamille-list" value="${esc(equipDraft.sous_famille)}" placeholder="Mousqueton…"></div>
+    </div>
+    <datalist id="famille-list">${['Métallique','Textile',...distinctValues('famille')].filter((v,i,a)=>a.indexOf(v)===i).map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
+    <datalist id="sousfamille-list">${distinctValues('sous_famille').map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
+    <div class="field"><label>N° de série</label>
+      <div style="display:flex;gap:8px;">
+        <input id="f-numeroSerie" class="mono" style="flex:1;" value="${esc(equipDraft.numero_serie)}">
+        <button type="button" onclick="scanQr()" style="flex-shrink:0;width:46px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--accent);font-size:18px;">📷</button>
+      </div>
+    </div>
+    <div class="field"><label>Identification</label><input id="f-identification" class="mono" value="${esc(equipDraft.identification)}"></div>
+    <div class="field"><label>Date de fabrication</label><input id="f-dateFabrication" type="date" value="${equipDraft.date_fabrication||''}"></div>
+    <div class="field"><label>Date de 1ère utilisation</label><input id="f-datePremiereUtilisation" type="date" value="${equipDraft.date_premiere_utilisation||''}"></div>
+    <div class="field"><label>Date de fin de vie</label><input id="f-dateFinVie" type="date" value="${equipDraft.date_fin_vie||''}"></div>
+    <div class="field"><label>Fiche technique — lien externe (optionnel)</label>
+      <input id="f-ficheTechnique" value="${isExternalLink(equipDraft.fiche_technique_url)?esc(equipDraft.fiche_technique_url):''}" placeholder="https://…">
+      ${equipDraft.fiche_technique_url && !isExternalLink(equipDraft.fiche_technique_url) ? '<p class="muted" style="font-size:12px;margin-top:6px;">📄 Un PDF est déjà en place — remplis le lien ci-dessus seulement si tu préfères pointer vers une page externe à la place.</p>' : ''}
+      <button type="button" class="btn btn-ghost" style="width:auto;margin-top:6px;" onclick="pickDatasheet()">${equipDraft.fiche_technique_url && !isExternalLink(equipDraft.fiche_technique_url)?'Remplacer le PDF':'Téléverser un PDF'}</button>
+    </div>
+  </div>
+  <button class="btn btn-primary" style="margin-bottom:48px;" ${state.busy?'disabled':''} onclick="saveEquip()">${state.busy?'<span class="spinner"></span>':(editing?'Enregistrer les modifications':'Créer la fiche')}</button>
+  `;
+}
+function renderAddControl(){
+  const e = state.equipment.find(x=>x.id===controlDraft._equipId);
+  return `
+  <div class="backlink" onclick="cancelAddControl()">‹ Annuler</div>
+  <h2>Contrôle annuel</h2>
+  <p class="muted" style="margin-bottom:16px;">${esc(e?e.designation:'')} ${e&&e.numero_serie?'· <span class="mono">'+esc(e.numero_serie)+'</span>':''}</p>
+  <div class="card">
+    <div class="field"><label>Date du contrôle</label><input id="c-date" type="date" value="${controlDraft.date}" oninput="controlDraft.date=this.value"></div>
+    <div class="field"><label>Nom du vérificateur</label><input id="c-verificateur" value="${esc(controlDraft.verificateur)}" oninput="controlDraft.verificateur=this.value"></div>
+    <div class="field"><label>Statut</label><select id="c-statut" onchange="controlDraft.statut=this.value">
+      <option value="conforme" ${controlDraft.statut==='conforme'?'selected':''}>Conforme</option>
+      <option value="reserve" ${controlDraft.statut==='reserve'?'selected':''}>Conforme avec réserve</option>
+      <option value="reforme" ${controlDraft.statut==='reforme'?'selected':''}>Réformé</option>
+    </select></div>
+    <div class="field"><label>Observations</label><textarea id="c-observations" placeholder="État du matériel, points relevés…" oninput="controlDraft.observations=this.value">${esc(controlDraft.observations)}</textarea></div>
+    <div class="field"><label>Photo (optionnelle)</label>
+      <div class="photo-picker">
+        ${controlDraft.photo?`<img class="thumb" src="${controlDraft.photo}" onclick="pickControlPhoto()">`:`<div class="thumb" style="display:flex;align-items:center;justify-content:center;cursor:pointer;" onclick="pickControlPhoto()">📷</div>`}
+        <button class="btn btn-ghost" style="width:auto;" onclick="pickControlPhoto()">${controlDraft.photo?'Changer':'Ajouter une photo'}</button>
+      </div>
+    </div>
+    <div class="field"><label>Signature du vérificateur</label>
+      <canvas id="sigpad" class="sigpad"></canvas>
+      <button class="btn btn-ghost" style="width:auto;margin-top:6px;" onclick="clearSignature()">Effacer la signature</button>
+    </div>
+  </div>
+  <button class="btn btn-primary" style="margin-bottom:48px;" ${state.busy?'disabled':''} onclick="saveControl()">${state.busy?'<span class="spinner"></span>':'Enregistrer le contrôle'}</button>
+  `;
+}
+
+/* ---- Validations en attente ---- */
+function renderApprovals(){
+  const pendingLoans = groupLoansByBatch(allLoans().filter(l=>l.status==='en_attente' && l.type==='pret'));
+  const pendingChanges = state.changeRequests;
+  return `
+  <div class="backlink" onclick="goto('list')">‹ Retour</div>
+  <h2>Validations en attente</h2>
+  ${can('validerPret') ? `
+  <h3 style="margin:16px 0 10px;">Prêts à valider</h3>
+  ${Object.keys(pendingLoans).length===0?'<p class="muted" style="margin-bottom:16px;">Aucun.</p>':Object.keys(pendingLoans).map(k=>{
+    const items = pendingLoans[k]; const first = items[0];
+    return `<div class="card">
+      <div style="font-weight:600;">${esc(first.borrower_name)}</div>
+      <p class="muted" style="font-size:12px;">Proposé par ${esc(first.created_by_name)} · ${fmtDate(first.checkout_date)}</p>
+      <div style="margin:8px 0;">${items.map(l=>`<div class="muted" style="font-size:13px;padding:4px 0;border-top:1px solid var(--border);">${esc(l._equip.designation)}</div>`).join('')}</div>
+      ${first.checkout_signature_url?`<img src="${imgSrc(first.checkout_signature_url)}" onerror="imgFallback(this)" style="height:40px;background:#fff;border-radius:4px;">`:''}
+      <div class="btn-row" style="margin-top:10px;">
+        <button class="btn btn-primary" onclick="validateLoanBatch('${k}')">Valider</button>
+        <button class="btn btn-danger" onclick="rejectLoanBatch('${k}')">Refuser</button>
+      </div>
+    </div>`;
+  }).join('')}` : ''}
+  ${can('validerModificationMateriel') ? `
+  <h3 style="margin:20px 0 10px;">Modifications de matériel</h3>
+  ${pendingChanges.length===0?'<p class="muted">Aucune.</p>':pendingChanges.map(cr=>{
+    const equip = state.equipment.find(x=>x.id===cr.equipment_id);
+    return `<div class="card">
+      <div style="font-weight:600;">${cr.type==='delete'?'Suppression':'Modification'} — ${esc(equip?equip.designation:(cr.proposed_data?cr.proposed_data.designation:'matériel'))}</div>
+      <p class="muted" style="font-size:12px;">Proposé par ${esc(cr.proposed_by_name)} · ${fmtDateTime(cr.created_at)}</p>
+      <div class="btn-row" style="margin-top:10px;">
+        <button class="btn btn-primary" onclick="approveChangeRequest('${cr.id}')">Valider</button>
+        <button class="btn btn-danger" onclick="rejectChangeRequest('${cr.id}')">Refuser</button>
+      </div>
+    </div>`;
+  }).join('')}` : ''}
+  `;
+}
+
+/* ---- Profil ---- */
+function renderProfile(){
+  return `
+  <h2>Profil</h2>
+  <a href="manuel-utilisation.pdf?v=3" target="_blank" rel="noopener" class="card tap" style="display:block;text-decoration:none;color:inherit;margin-bottom:14px;">
+    <div class="row"><b>📖 Aide — Manuel d'utilisation</b><span class="muted">›</span></div>
+  </a>
+  <div class="card tap" style="margin-bottom:14px;" onclick="toggleTheme()">
+    <div class="row"><b>${document.documentElement.getAttribute('data-theme')==='light'?'🌙 Passer au thème sombre':'☀️ Passer au thème clair'}</b><span class="muted">›</span></div>
+  </div>
+  <div class="card" style="text-align:center;">
+    ${state.myAvatarUrl?`<img src="${imgSrc(state.myAvatarUrl)}" onerror="imgFallback(this)" style="width:88px;height:88px;border-radius:50%;object-fit:cover;margin-bottom:10px;">`:`<div class="user-dot" style="width:88px;height:88px;font-size:28px;margin:0 auto 10px;">${esc(initials(state.myDisplayName))}</div>`}
+    <div style="font-weight:600;font-size:16px;">${esc(state.myDisplayName)}</div>
+    <div class="muted" style="font-size:12px;">${esc(ROLES[state.role].label)} · ${esc(state.unit.name)}</div>
+    <button class="btn btn-ghost" style="width:auto;margin-top:10px;" onclick="pickAvatarPhoto()">Changer la photo</button>
+  </div>
+  <div class="card">
+    <h3 style="margin-bottom:10px;">Mot de passe</h3>
+    <div class="field"><label>Nouveau mot de passe</label>
+      <div style="display:flex;gap:8px;"><input id="pw-new" type="password" style="flex:1;"><button type="button" class="btn btn-ghost" style="width:auto;" onclick="togglePwVisibility('pw-new',this)">👁</button></div>
+    </div>
+    <div class="field"><label>Confirmer le mot de passe</label>
+      <div style="display:flex;gap:8px;"><input id="pw-confirm" type="password" style="flex:1;"><button type="button" class="btn btn-ghost" style="width:auto;" onclick="togglePwVisibility('pw-confirm',this)">👁</button></div>
+    </div>
+    <button class="btn btn-primary" ${state.busy?'disabled':''} onclick="changePassword()">${state.busy?'<span class="spinner"></span>':'Changer le mot de passe'}</button>
+  </div>
+  ${renderMfaSection()}
+  ${state.unit.owner_id===state.session.user.id ? `
+  <div class="card">
+    <h3 style="margin-bottom:8px;">Nom de l'unité</h3>
+    <div class="field" style="margin-bottom:8px;"><input id="unit-name-input" value="${esc(state.unit.name)}"></div>
+    <button class="btn btn-ghost" style="width:auto;" ${state.busy?'disabled':''} onclick="renameUnit()">Enregistrer le nom</button>
+  </div>` : ''}
+  ${can('gererMembres') ? `
+  <div class="card">
+    <h3 style="margin-bottom:8px;">Photo de l'équipe</h3>
+    <div class="row" style="justify-content:flex-start;gap:12px;">
+      ${state.unit.avatar_url?`<img src="${imgSrc(state.unit.avatar_url)}" onerror="imgFallback(this)" style="width:56px;height:56px;border-radius:10px;object-fit:cover;">`:''}
+      <button class="btn btn-ghost" style="width:auto;" onclick="pickTeamPhoto()">${state.unit.avatar_url?'Changer':'Ajouter'} la photo</button>
+    </div>
+  </div>` : ''}
+  <h3 style="margin:20px 0 10px;">Ton équipe — ${esc(state.unit.name)}</h3>
+  <p class="muted" style="margin-bottom:16px;">${state.members.length} membre(s).</p>
+  ${can('gererMembres') ? `
+  <div class="card">
+    <h3 style="margin-bottom:8px;">Code d'invitation</h3>
+    <div class="code-display">${esc(state.unit.join_code||'—')}</div>
+    <p class="muted">Partage ce code : chaque nouvelle personne s'inscrit, puis rejoint l'unité avec ce code (rôle « Lecteur » par défaut, à ajuster ci-dessous).</p>
+  </div>` : ''}
+  ${state.members.map(m=>`
+    <div class="card">
+      <div class="row">
+        <div class="row" style="gap:10px;">
+          ${m.avatar_url?`<img src="${imgSrc(m.avatar_url)}" onerror="imgFallback(this)" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;">`:`<div class="user-dot">${esc(initials(m.display_name))}</div>`}
+          <div>
+            <div style="font-weight:600;">${esc(m.display_name)}${m.id===state.myMemberId?' <span class="muted" style="font-weight:400;">(toi)</span>':''}</div>
+            <div class="muted" style="font-size:12px;">${esc(ROLES[m.role].label)}${m.user_id===state.unit.owner_id?' · <span style="color:var(--accent);">Propriétaire</span>':''}</div>
+          </div>
+        </div>
+        ${can('gererMembres') && m.id!==state.myMemberId ? `
+        <div class="row" style="gap:6px;width:auto;">
+          <select onchange="changeRole('${m.id}', this.value, '${esc(m.display_name)}')" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 8px;font-size:12px;">
+            <option value="lecteur" ${m.role==='lecteur'?'selected':''}>Lecteur</option>
+            <option value="assistant" ${m.role==='assistant'?'selected':''}>Assistant</option>
+            <option value="verificateur" ${m.role==='verificateur'?'selected':''}>Vérificateur</option>
+            <option value="administrateur" ${m.role==='administrateur'?'selected':''}>Administrateur</option>
+          </select>
+          <button class="btn btn-ghost" style="width:auto;padding:6px 8px;color:var(--danger);" onclick="removeMember('${m.id}','${esc(m.display_name)}')">✕</button>
+        </div>`:''}
+      </div>
+    </div>`).join('')}
+  <div class="divider"></div>
+  <h3 style="margin-bottom:10px;">Rôles</h3>
+  <div class="card"><b style="font-size:13px;">Administrateur</b><p class="muted" style="font-size:13px;margin-top:4px;">Accès complet : matériel, membres, prêts, validations.</p></div>
+  <div class="card"><b style="font-size:13px;">Vérificateur</b><p class="muted" style="font-size:13px;margin-top:4px;">Comme l'administrateur, sauf modifier/supprimer du matériel directement — passe par une proposition validée par l'administrateur.</p></div>
+  <div class="card"><b style="font-size:13px;">Assistant</b><p class="muted" style="font-size:13px;margin-top:4px;">Peut sortir du matériel en mission librement, et prêter du matériel (le prêt doit être validé par un administrateur ou un vérificateur).</p></div>
+  <div class="card"><b style="font-size:13px;">Lecteur</b><p class="muted" style="font-size:13px;margin-top:4px;">Consultation et export uniquement.</p></div>
+  <div class="divider"></div>
+  ${state.unit.owner_id===state.session.user.id ? `
+  <div class="card" style="border-color:var(--warn);">
+    <b style="font-size:13px;color:var(--warn);">Propriétaire de cette unité</b>
+    <p class="muted" style="font-size:13px;margin-top:4px;">Tu ne peux pas quitter cette unité sans transférer la propriété à un autre administrateur au préalable.</p>
+    <button class="btn btn-secondary" style="margin-top:10px;" onclick="openTransferOwnership()">Transférer la propriété</button>
+  </div>` : `
+  <button class="btn btn-danger" style="margin-top:10px;" onclick="leaveUnit()">Quitter cette unité</button>
+  `}
+  <button class="btn btn-secondary" style="margin-top:10px;margin-bottom:20px;" onclick="doLogout()">Se déconnecter</button>
+  `;
+}
+function openTransferOwnership(){ state.view='transferOwnership'; render(); }
+function renderTransferOwnership(){
+  const admins = state.members.filter(m=>m.role==='administrateur' && m.id!==state.myMemberId);
+  return `
+  <div class="backlink" onclick="state.view='profile'; render();">‹ Retour</div>
+  <h2>Transférer la propriété</h2>
+  <p class="muted" style="margin-bottom:16px;">Choisis un administrateur qui deviendra propriétaire de l'unité « ${esc(state.unit.name)} ». Tu pourras ensuite quitter l'unité si tu le souhaites.</p>
+  ${admins.length===0 ? `<p class="muted">Aucun autre administrateur dans cette unité pour le moment. Nomme d'abord quelqu'un administrateur depuis la liste de l'équipe, puis reviens ici.</p>` : `
+  <div class="role-pick">
+    ${admins.map(m=>`
+      <div class="role-opt" style="cursor:pointer;" onclick="performTransfer('${m.user_id}','${esc(m.display_name)}')">
+        <div class="row" style="width:100%;"><div style="font-weight:600;font-size:14px;">${esc(m.display_name)}</div><span class="muted">›</span></div>
+      </div>`).join('')}
+  </div>`}
+  `;
+}
+async function performTransfer(newOwnerUserId, name){
+  if(!confirm(`Faire de ${name} le nouveau propriétaire de l'unité ?`)) return;
+  const { error } = await sb.from('units').update({owner_id:newOwnerUserId}).eq('id', state.unit.id);
+  if(error){ showToast(error.message); return; }
+  state.unit.owner_id = newOwnerUserId;
+  await logAction('Propriété transférée', name);
+  state.view='profile'; render();
+  showToast('Propriété transférée — tu peux maintenant quitter cette unité si tu le souhaites.');
+}
+async function leaveUnit(){
+  if(state.role==='administrateur'){
+    const otherAdmins = state.members.filter(m=>m.role==='administrateur' && m.id!==state.myMemberId).length;
+    if(otherAdmins===0){
+      showToast("Tu es le dernier administrateur de cette unité — nomme quelqu'un d'autre administrateur avant de partir.");
+      return;
+    }
+  }
+  if(!confirm(`Quitter l'unité « ${state.unit.name} » ?`)) return;
+  const { error } = await sb.from('unit_members').delete().eq('id', state.myMemberId);
+  if(error){ showToast(error.message); return; }
+  state.unit=null; state.role=null; state.myMemberId=null; state.activeMembershipId=null;
+  await loadUnitContext();
+  showToast("Tu as quitté l'unité");
+}
+async function changePassword(){
+  const pw = document.getElementById('pw-new').value;
+  const pw2 = document.getElementById('pw-confirm').value;
+  if(pw.length<8){ showToast('8 caractères minimum'); return; }
+  if(pw!==pw2){ showToast('Les mots de passe ne correspondent pas'); return; }
+  state.busy=true; render();
+  const { error } = await sb.auth.updateUser({ password: pw });
+  state.busy=false;
+  if(error){ showToast(error.message); render(); return; }
+  showToast('Mot de passe changé');
+  render();
+}
+
+/* ---- Double authentification (2FA / TOTP) ---- */
+async function refreshMfaFactors(){
+  const { data } = await sb.auth.mfa.listFactors();
+  state.mfaFactors = (data && data.totp) || [];
+}
+function renderMfaSection(){
+  const verified = state.mfaFactors.find(f=>f.status==='verified');
+  if(state.mfaEnroll){
+    return `
+    <div class="card">
+      <h3 style="margin-bottom:10px;">Double authentification</h3>
+      <p class="muted" style="font-size:12px;margin-bottom:10px;">Scanne ce code avec une application comme Google Authenticator ou Authy, puis saisis le code à 6 chiffres généré.</p>
+      <div style="background:#fff;padding:12px;border-radius:8px;margin-bottom:10px;max-width:220px;">${state.mfaEnroll.qr_code}</div>
+      <p class="mono muted" style="font-size:11px;margin-bottom:10px;word-break:break-all;">Code secret (si le scan ne fonctionne pas) : ${esc(state.mfaEnroll.secret)}</p>
+      <div class="field"><input id="mfa-enroll-code" inputmode="numeric" maxlength="6" placeholder="123456" style="text-align:center;font-size:20px;letter-spacing:6px;"></div>
+      <div class="btn-row">
+        <button class="btn btn-primary" ${state.busy?'disabled':''} onclick="confirmMfaEnroll()">${state.busy?'<span class="spinner"></span>':'Activer'}</button>
+        <button class="btn btn-secondary" onclick="cancelMfaEnroll()">Annuler</button>
+      </div>
+    </div>`;
+  }
+  return `
+  <div class="card">
+    <h3 style="margin-bottom:6px;">Double authentification</h3>
+    <p class="muted" style="font-size:12px;margin-bottom:10px;">${verified?'Activée sur ce compte — un code sera demandé à chaque connexion.':'Optionnelle : ajoute un code à usage unique en plus du mot de passe à chaque connexion.'}</p>
+    ${verified
+      ? `<button class="btn btn-danger" ${state.busy?'disabled':''} onclick="disableMfa('${verified.id}')">${state.busy?'<span class="spinner"></span>':'Désactiver'}</button>`
+      : `<button class="btn btn-secondary" ${state.busy?'disabled':''} onclick="startMfaEnroll()">${state.busy?'<span class="spinner"></span>':'Activer la double authentification'}</button>`}
+  </div>`;
+}
+async function startMfaEnroll(){
+  state.busy=true; render();
+  const { data, error } = await sb.auth.mfa.enroll({ factorType:'totp' });
+  state.busy=false;
+  if(error){ showToast(error.message); render(); return; }
+  state.mfaEnroll = { factorId:data.id, qr_code:data.totp.qr_code, secret:data.totp.secret };
+  render();
+}
+function cancelMfaEnroll(){
+  if(state.mfaEnroll) sb.auth.mfa.unenroll({ factorId: state.mfaEnroll.factorId }).catch(()=>{});
+  state.mfaEnroll = null;
+  render();
+}
+async function confirmMfaEnroll(){
+  const code = document.getElementById('mfa-enroll-code').value.trim();
+  if(!code){ showToast('Saisis le code à 6 chiffres'); return; }
+  state.busy=true; render();
+  try{
+    const { data: challenge, error: chErr } = await sb.auth.mfa.challenge({ factorId: state.mfaEnroll.factorId });
+    if(chErr) throw chErr;
+    const { error: verErr } = await sb.auth.mfa.verify({ factorId: state.mfaEnroll.factorId, challengeId: challenge.id, code });
+    if(verErr) throw verErr;
+    state.mfaEnroll = null;
+    await refreshMfaFactors();
+    showToast('Double authentification activée');
+  }catch(err){ showToast(err.message || 'Code invalide'); }
+  state.busy=false; render();
+}
+async function disableMfa(factorId){
+  if(!confirm('Désactiver la double authentification sur ce compte ?')) return;
+  state.busy=true; render();
+  const { error } = await sb.auth.mfa.unenroll({ factorId });
+  state.busy=false;
+  if(error){ showToast(error.message); render(); return; }
+  await refreshMfaFactors();
+  render();
+  showToast('Double authentification désactivée');
+}
+function pickAvatarPhoto(){
+  pickPhoto(async (raw)=>{
+    try{
+      const resized = await resizeDataUrl(raw, 400, 0.7);
+      const url = await uploadImage(resized, `${state.unit.id}/avatars/${state.myMemberId}.jpg`);
+      const { error } = await sb.from('unit_members').update({avatar_url:url}).eq('id', state.myMemberId);
+      if(error) throw error;
+      state.myAvatarUrl = url;
+      await refreshAll(); render();
+      showToast('Photo mise à jour');
+    }catch(err){ showToast(err.message); }
+  });
+}
+function pickTeamPhoto(){
+  pickPhoto(async (raw)=>{
+    try{
+      const resized = await resizeDataUrl(raw, 500, 0.7);
+      const url = await uploadImage(resized, `${state.unit.id}/avatar.jpg`);
+      const { error } = await sb.from('units').update({avatar_url:url}).eq('id', state.unit.id);
+      if(error) throw error;
+      state.unit.avatar_url = url;
+      await resolveSignedUrls([url]);
+      render();
+      showToast("Photo de l'équipe mise à jour");
+    }catch(err){ showToast(err.message); }
+  });
+}
+async function renameUnit(){
+  const newName = document.getElementById('unit-name-input').value.trim();
+  if(!newName){ showToast('Le nom ne peut pas être vide'); return; }
+  state.busy=true; render();
+  const { error } = await sb.from('units').update({name:newName}).eq('id', state.unit.id);
+  state.busy=false;
+  if(error){ showToast(error.message); render(); return; }
+  state.unit.name = newName;
+  await logAction("Unité renommée", newName);
+  render();
+  showToast('Nom mis à jour');
+}
+/* ---- Members ---- */
+async function changeRole(memberId, newRole, name){
+  const { error } = await sb.from('unit_members').update({role:newRole}).eq('id', memberId);
+  if(error){ showToast(error.message); render(); return; }
+  await logAction('Rôle modifié', `${name} → ${ROLES[newRole].label}`);
+  await refreshAll(); render();
+  showToast('Rôle mis à jour');
+}
+async function removeMember(memberId, name){
+  if(!confirm(`Retirer ${name} de l'unité ?`)) return;
+  const { error } = await sb.from('unit_members').delete().eq('id', memberId);
+  if(error){ showToast(error.message); render(); return; }
+  await logAction('Membre retiré', name);
+  await refreshAll(); render();
+  showToast('Membre retiré');
+}
+
+/* ---- Journal ---- */
+async function openJournal(){ await loadJournal(); state.view='journal'; render(); }
+function renderJournalView(){
+  return `
+  <h2>Journal des modifications</h2>
+  <p class="muted" style="margin-bottom:16px;">Historique des actions sur l'unité ${esc(state.unit.name)}.</p>
+  ${state.journal.length===0?'<p class="muted">Aucune action enregistrée.</p>':state.journal.map(j=>`
+    <div class="journal-item">
+      <div class="row"><b style="font-size:14px;">${esc(j.action)}</b><span class="muted" style="font-size:11px;">${fmtDateTime(j.created_at)}</span></div>
+      <p class="muted" style="font-size:13px;margin-top:2px;">${esc(j.user_name)}${j.target_label?' · '+esc(j.target_label):''}</p>
+    </div>`).join('')}
+  `;
+}
+
+/* ---- Export ---- */
+function renderExport(){
+  return `
+  <h2>Export du matériel</h2>
+  <p class="muted" style="margin-bottom:16px;">Génère une liste au format CSV (compatible tableur).</p>
+  <div class="card"><p style="margin-bottom:14px;"><b>${state.equipment.length}</b> article(s) au total</p><button class="btn btn-primary" onclick="exportCsv()">Exporter en CSV</button></div>
+  ${can('creerMateriel') ? `
+  <h2 style="margin-top:24px;">Import du matériel</h2>
+  <p class="muted" style="margin-bottom:16px;">Ajoute plusieurs fiches d'un coup à partir d'un fichier CSV (désignation, marque, famille, numéro de série, identification, dates — sans photo, fiche technique ni contrôle).</p>
+  <div class="card">
+    <button class="btn btn-secondary" style="margin-bottom:10px;" onclick="downloadImportTemplate()">Télécharger le modèle CSV</button>
+    <button class="btn btn-primary" onclick="document.getElementById('csvInput').click()">Importer un fichier CSV</button>
+    <p class="muted" style="margin-top:10px;font-size:12px;">Remplis le modèle (une ligne par article), en gardant les dates au format AAAA-MM-JJ (ou JJ/MM/AAAA), puis importe-le ici. Un aperçu s'affiche avant toute création.</p>
+  </div>` : ''}
+  ${can('gererMembres') ? `
+  <h2 style="margin-top:24px;">Sauvegarde complète</h2>
+  <p class="muted" style="margin-bottom:16px;">Télécharge toutes les données de l'unité (matériel, contrôles, prêts, membres, journal) dans un fichier. Les photos, signatures et fiches techniques ne sont pas incluses dans le fichier — seuls leurs liens le sont (ils restent valables tant que l'unité existe).</p>
+  <div class="card">
+    <button class="btn btn-secondary" ${state.busy?'disabled':''} onclick="downloadUnitBackup()">${state.busy?'<span class="spinner"></span>':'Télécharger la sauvegarde (JSON)'}</button>
+    <p class="muted" style="margin-top:10px;font-size:12px;">À faire de temps en temps et à garder de côté (Drive, ordinateur...). Ce fichier ne se réimporte pas automatiquement dans l'app pour l'instant — c'est une copie de secours à consulter ou transmettre en cas de besoin.</p>
+  </div>` : ''}
+  `;
+}
+async function downloadUnitBackup(){
+  state.busy=true; render();
+  try{
+    const [eqRes, memRes, crRes, logRes] = await Promise.all([
+      sb.from('equipment').select('*, controls(*), loans(*)').eq('unit_id', state.unit.id),
+      sb.from('unit_members').select('*').eq('unit_id', state.unit.id),
+      sb.from('change_requests').select('*').eq('unit_id', state.unit.id),
+      sb.from('audit_log').select('*').eq('unit_id', state.unit.id).order('created_at',{ascending:false})
+    ]);
+    const payload = {
+      export_date: new Date().toISOString(),
+      unit: state.unit,
+      members: memRes.data || [],
+      equipment: eqRes.data || [],
+      change_requests: crRes.data || [],
+      audit_log: logRes.data || []
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob); const a=document.createElement('a');
+    a.href=url; a.download=`sauvegarde-${state.unit.name.replace(/[^a-z0-9]+/gi,'-')}-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    showToast('Sauvegarde téléchargée');
+  }catch(err){ showToast(err.message); }
+  state.busy=false; render();
+}
+function downloadImportTemplate(){
+  const headers = ['Désignation','Marque','Famille','Sous-famille','N° de série','Identification','Date de fabrication (AAAA-MM-JJ)','Date de 1ère utilisation (AAAA-MM-JJ)','Date de fin de vie (AAAA-MM-JJ)'];
+  const example = ['Baudrier','Petzl','Textile','Baudrier','SN-00123','ID-045','2023-01-15','2023-02-01','2030-01-15'];
+  const csv = [headers, example].map(r=>r.map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(';')).join(String.fromCharCode(10));
+  const blob = new Blob([String.fromCharCode(0xFEFF)+csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=url; a.download='modele-import-materiel.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  showToast('Modèle téléchargé');
+}
+function parseCsvText(text){
+  text = text.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+  const rows = []; let row = [], field = '', inQuotes = false;
+  for(let i=0;i<text.length;i++){
+    const c = text[i];
+    if(inQuotes){
+      if(c === '"'){ if(text[i+1] === '"'){ field+='"'; i++; } else { inQuotes = false; } }
+      else field += c;
+    } else {
+      if(c === '"') inQuotes = true;
+      else if(c === ';' || c === ',') { row.push(field); field=''; }
+      else if(c === '\n'){ row.push(field); rows.push(row); row=[]; field=''; }
+      else field += c;
+    }
+  }
+  if(field.length>0 || row.length>0){ row.push(field); rows.push(row); }
+  return rows.filter(r => r.length>1 || (r[0]||'').trim()!=='');
+}
+function parseFlexibleDate(s){
+  if(!s) return null;
+  s = s.trim();
+  if(!s) return null;
+  if(/^\d{4}-\d{1,2}-\d{1,2}$/.test(s)){
+    const [y,m,d] = s.split('-').map(Number);
+    return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  }
+  if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)){
+    const [d,m,y] = s.split('/').map(Number);
+    return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  }
+  return null;
+}
+document.getElementById('csvInput').addEventListener('change', async (e)=>{
+  const file = e.target.files[0]; e.target.value='';
+  if(!file) return;
+  const text = await file.text();
+  const allRows = parseCsvText(text);
+  if(allRows.length<2){ showToast('Fichier vide ou invalide'); return; }
+  const dataRows = allRows.slice(1);
+  const parsed = []; const errors = [];
+  dataRows.forEach((r, idx)=>{
+    const designation = (r[0]||'').trim();
+    if(!designation){
+      if(r.some(c=>(c||'').trim())) errors.push(`Ligne ${idx+2} : désignation manquante, ignorée.`);
+      return;
+    }
+    parsed.push({
+      designation, marque:(r[1]||'').trim()||null, famille:(r[2]||'').trim()||null, sous_famille:(r[3]||'').trim()||null,
+      numero_serie:(r[4]||'').trim()||null, identification:(r[5]||'').trim()||null,
+      date_fabrication: parseFlexibleDate(r[6]), date_premiere_utilisation: parseFlexibleDate(r[7]), date_fin_vie: parseFlexibleDate(r[8])
+    });
+  });
+  state.importPreview = { rows: parsed, errors };
+  state.view = 'importPreview';
+  render();
+});
+function renderImportPreview(){
+  const { rows, errors } = state.importPreview;
+  return `
+  <div class="backlink" onclick="goto('export')">‹ Annuler</div>
+  <h2>Aperçu de l'import</h2>
+  <p class="muted" style="margin-bottom:16px;"><b>${rows.length}</b> article(s) prêt(s) à être créés.${errors.length?` ${errors.length} ligne(s) ignorée(s).`:''}</p>
+  ${errors.length?`<div class="qr-status err">${errors.map(x=>esc(x)).join('<br>')}</div>`:''}
+  ${rows.length===0?'<p class="muted">Rien à importer.</p>':`
+  <div class="card">
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead><tr style="text-align:left;color:var(--text-muted);"><th style="padding:4px 8px 4px 0;">Désignation</th><th style="padding:4px 8px;">Marque</th><th style="padding:4px 0 4px 8px;">N° série</th></tr></thead>
+      <tbody>
+      ${rows.slice(0,15).map(r=>`<tr style="border-top:1px solid var(--border);"><td style="padding:6px 8px 6px 0;">${esc(r.designation)}</td><td style="padding:6px 8px;">${esc(r.marque||'')}</td><td style="padding:6px 0 6px 8px;" class="mono">${esc(r.numero_serie||'')}</td></tr>`).join('')}
+      </tbody>
+    </table>
+    ${rows.length>15?`<p class="muted" style="margin-top:8px;">+ ${rows.length-15} autre(s)…</p>`:''}
+  </div>
+  <button class="btn btn-primary" style="margin-bottom:48px;" ${state.busy?'disabled':''} onclick="confirmImport()">${state.busy?'<span class="spinner"></span>':"Confirmer l'import (" + rows.length + (rows.length>1?' articles)':' article)')}</button>`}
+  `;
+}
+async function confirmImport(){
+  const { rows } = state.importPreview;
+  if(!rows || rows.length===0){ showToast('Rien à importer'); return; }
+  state.busy=true; render();
+  try{
+    const payload = rows.map(r=>Object.assign({}, r, {unit_id: state.unit.id, created_by: state.session.user.id, created_by_name: state.myDisplayName}));
+    const { error } = await sb.from('equipment').insert(payload);
+    if(error) throw error;
+    await logAction('Import CSV', `${rows.length} article(s) importés`);
+    await refreshAll(); state.view='list';
+    showToast(`${rows.length} article(s) importés`);
+  }catch(err){ showToast(err.message); }
+  state.busy=false; render();
+}
+function exportCsv(){
+  const headers = ['Désignation','Marque','N° série','Identification','Date fabrication','Date 1ère utilisation','Date fin de vie','Statut','Dernier contrôle','Dernier vérificateur','Créé par'];
+  const rows = state.equipment.map(e=>{
+    const last = (e.controls||[]).slice().sort((a,b)=>b.date.localeCompare(a.date))[0];
+    return [e.designation,e.marque,e.numero_serie,e.identification,e.date_fabrication,e.date_premiere_utilisation,e.date_fin_vie,statusOf(e).label,last?last.date:'',last?last.verificateur_name:'',e.created_by_name];
+  });
+  const csv = [headers,...rows].map(r=>r.map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(';')).join(String.fromCharCode(10));
+  const blob = new Blob([String.fromCharCode(0xFEFF)+csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=url; a.download=`registre-materiel-${state.unit.name}-${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  showToast('Export CSV téléchargé');
+}
+
+/* ---- Navigation ---- */
+function goto(v){ state.view=v; state.qrStatus=null; render(); }
+function setFilter(f){ state.filter=f; render(); }
+function openDetail(id){ state.detailId=id; state.view='detail'; render(); }
+function startAddEquip(){ newEquipDraft(); state.qrStatus=null; state.view='addEquip'; render(); }
+function editEquip(id){
+  const e = state.equipment.find(x=>x.id===id);
+  equipDraft = {designation:e.designation,marque:e.marque,numero_serie:e.numero_serie,identification:e.identification,date_fabrication:e.date_fabrication,date_premiere_utilisation:e.date_premiere_utilisation,date_fin_vie:e.date_fin_vie,famille:e.famille,sous_famille:e.sous_famille,fiche_technique_url:e.fiche_technique_url,photo:null,photo_url:e.photo_url,_editId:id};
+  state.view='addEquip'; render();
+}
+function cancelAddEquip(){ state.view = equipDraft._editId ? 'detail' : 'list'; render(); }
+async function deleteEquip(id){
+  const e = state.equipment.find(x=>x.id===id);
+  if(!confirm("Déplacer cette fiche vers la corbeille ? Tu pourras la restaurer depuis la corbeille de l'onglet Matériel.")) return;
+  const { error } = await sb.from('equipment').update({deleted_at: new Date().toISOString()}).eq('id', id);
+  if(error){ showToast(error.message); return; }
+  await logAction('Matériel mis à la corbeille', e.designation);
+  await refreshAll(); state.view='list'; render();
+  showToast('Fiche déplacée vers la corbeille');
+}
+async function restoreEquip(id){
+  const e = state.equipment.find(x=>x.id===id);
+  const { error } = await sb.from('equipment').update({deleted_at: null}).eq('id', id);
+  if(error){ showToast(error.message); return; }
+  await logAction('Matériel restauré', e?e.designation:'');
+  await refreshAll(); render();
+  showToast('Fiche restaurée');
+}
+async function permanentlyDeleteEquip(id){
+  const e = state.equipment.find(x=>x.id===id);
+  if(!confirm(`Supprimer DÉFINITIVEMENT « ${e?e.designation:''} » ? Impossible à annuler.`)) return;
+  const { error } = await sb.from('equipment').delete().eq('id', id);
+  if(error){ showToast(error.message); return; }
+  await logAction('Matériel supprimé définitivement', e?e.designation:'');
+  await refreshAll(); render();
+  showToast('Fiche supprimée définitivement');
+}
+function renderTrash(){
+  const trashed = state.equipment.filter(e=>e.deleted_at).slice().sort((a,b)=>(b.deleted_at||'').localeCompare(a.deleted_at||''));
+  return `
+  <div class="backlink" onclick="goto('list')">‹ Retour au matériel</div>
+  <h2>Corbeille</h2>
+  <p class="muted" style="margin-bottom:16px;">Le matériel supprimé reste ici jusqu'à restauration ou suppression définitive.</p>
+  ${trashed.length===0?'<div class="empty">La corbeille est vide.</div>':trashed.map(e=>`
+    <div class="card">
+      <div class="row">
+        <div class="row" style="gap:10px;">
+          ${e.photo_url?`<img class="thumb" src="${imgSrc(e.photo_url)}" onerror="imgFallback(this)">`:`<div class="thumb"></div>`}
+          <div>
+            <div style="font-weight:600;font-size:14px;">${esc(e.designation)||'—'}</div>
+            <div class="muted" style="font-size:12px;">${esc(e.marque)||'—'} · supprimé le ${fmtDate(e.deleted_at)}</div>
+          </div>
+        </div>
+      </div>
+      <div class="btn-row" style="margin-top:10px;">
+        <button class="btn btn-secondary" onclick="restoreEquip('${e.id}')">Restaurer</button>
+        ${can('supprimerMateriel')?`<button class="btn btn-danger" onclick="permanentlyDeleteEquip('${e.id}')">Supprimer définitivement</button>`:''}
+      </div>
+    </div>`).join('')}
+  `;
+}
+async function proposeDeleteEquip(id){
+  const e = state.equipment.find(x=>x.id===id);
+  if(!confirm('Proposer la suppression de cette fiche ? Un administrateur devra valider.')) return;
+  const { error } = await sb.from('change_requests').insert({
+    unit_id: state.unit.id, equipment_id: id, type:'delete', proposed_by: state.session.user.id, proposed_by_name: state.myDisplayName
+  });
+  if(error){ showToast(error.message); return; }
+  await logAction('Suppression proposée', e?e.designation:'');
+  await refreshAll(); render();
+  showToast('Suppression proposée — en attente de validation');
+}
+async function approveChangeRequest(id){
+  const cr = state.changeRequests.find(c=>c.id===id);
+  if(!cr) return;
+  try{
+    if(cr.type==='delete'){
+      const { error } = await sb.from('equipment').update({deleted_at: new Date().toISOString()}).eq('id', cr.equipment_id);
+      if(error) throw error;
+    } else {
+      const { error } = await sb.from('equipment').update(Object.assign({}, cr.proposed_data, {
+        updated_by: cr.proposed_by, updated_by_name: cr.proposed_by_name, updated_at: new Date().toISOString()
+      })).eq('id', cr.equipment_id);
+      if(error) throw error;
+    }
+    await sb.from('change_requests').update({status:'approuve', resolved_by: state.session.user.id, resolved_by_name: state.myDisplayName, resolved_at: new Date().toISOString()}).eq('id', id);
+    await logAction(cr.type==='delete'?'Suppression validée':'Modification validée', cr.proposed_data?cr.proposed_data.designation:'');
+    await refreshAll();
+    if(cr.type==='delete' && state.detailId===cr.equipment_id) state.view='list';
+    render();
+    showToast('Validé');
+  }catch(err){ showToast(err.message); }
+}
+async function rejectChangeRequest(id){
+  const cr = state.changeRequests.find(c=>c.id===id);
+  const { error } = await sb.from('change_requests').update({status:'rejete', resolved_by: state.session.user.id, resolved_by_name: state.myDisplayName, resolved_at: new Date().toISOString()}).eq('id', id);
+  if(error){ showToast(error.message); return; }
+  await logAction('Modification refusée', cr?(cr.proposed_data?cr.proposed_data.designation:''):'');
+  await refreshAll(); render();
+  showToast('Refusé');
+}
+function pickEquipPhoto(){ syncEquipDraftFromDom(); pickPhoto(async (raw)=>{ equipDraft.photo = await resizeDataUrl(raw, 900, 0.65); render(); }); }
+async function scanQr(){
+  syncEquipDraftFromDom();
+  showToast('Ouverture de la caméra…');
+  pickPhoto(async (raw)=>{
+    showToast('Lecture du QR code…');
+    const data = await decodeQrFromDataUrl(raw);
+    if(!data){ showToast('Aucun QR code détecté — réessaie avec une photo plus nette'); return; }
+    let matched = false;
+    try{
+      const obj = JSON.parse(data);
+      if(obj && obj.numeroSerie){ equipDraft.numero_serie = obj.numeroSerie; matched=true; }
+      const map = {designation:'designation',marque:'marque',identification:'identification',dateFabrication:'date_fabrication',datePremiereUtilisation:'date_premiere_utilisation',dateFinVie:'date_fin_vie'};
+      Object.keys(map).forEach(k=>{ if(obj[k]){ equipDraft[map[k]] = obj[k]; } });
+    }catch(err){ /* pas du JSON : contenu brut */ }
+    if(!matched) equipDraft.numero_serie = data.trim();
+    render();
+    showToast('Numéro de série rempli depuis le QR code');
+  });
+}
+function duplicateEquip(id){
+  const e = state.equipment.find(x=>x.id===id);
+  equipDraft = {designation:e.designation,marque:e.marque,famille:e.famille,sous_famille:e.sous_famille,numero_serie:'',identification:'',
+    date_fabrication:e.date_fabrication,date_premiere_utilisation:e.date_premiere_utilisation,date_fin_vie:e.date_fin_vie,
+    fiche_technique_url:e.fiche_technique_url,photo:null,photo_url:e.photo_url,_duplicateNote:e.designation};
+  state.view='addEquip'; render();
+}
+async function saveEquip(){
+  const get = id=>document.getElementById(id).value.trim();
+  const fields = {
+    designation:get('f-designation'), marque:get('f-marque'), numero_serie:get('f-numeroSerie'), identification:get('f-identification'),
+    date_fabrication:get('f-dateFabrication')||null, date_premiere_utilisation:get('f-datePremiereUtilisation')||null, date_fin_vie:get('f-dateFinVie')||null,
+    famille:get('f-famille')||null, sous_famille:get('f-sousFamille')||null,
+    fiche_technique_url: get('f-ficheTechnique').trim() || (equipDraft.fiche_technique_url && !isExternalLink(equipDraft.fiche_technique_url) ? equipDraft.fiche_technique_url : null)
+  };
+  if(!fields.designation){ showToast('La désignation est obligatoire'); return; }
+  state.busy=true; render();
+  try{
+    let photo_url = equipDraft.photo_url || null;
+    if(equipDraft.photo){ photo_url = await uploadImage(equipDraft.photo, `${state.unit.id}/equipment/${uid()}.jpg`); }
+    if(equipDraft._editId){
+      fields.photo_url = photo_url;
+      if(can('editerMateriel')){
+        fields.updated_by = state.session.user.id; fields.updated_by_name = state.myDisplayName; fields.updated_at = new Date().toISOString();
+        const { error } = await sb.from('equipment').update(fields).eq('id', equipDraft._editId);
+        if(error) throw error;
+        await logAction('Matériel modifié', fields.designation);
+        await refreshAll(); state.detailId = equipDraft._editId; state.view='detail';
+        showToast('Fiche mise à jour');
+      } else {
+        const { error } = await sb.from('change_requests').insert({
+          unit_id: state.unit.id, equipment_id: equipDraft._editId, type:'update', proposed_data: fields,
+          proposed_by: state.session.user.id, proposed_by_name: state.myDisplayName
+        });
+        if(error) throw error;
+        await logAction('Modification proposée', fields.designation);
+        await refreshAll(); state.detailId = equipDraft._editId; state.view='detail';
+        showToast('Modification proposée — en attente de validation');
+      }
+    } else {
+      fields.unit_id = state.unit.id; fields.photo_url = photo_url;
+      fields.created_by = state.session.user.id; fields.created_by_name = state.myDisplayName;
+      const { error } = await sb.from('equipment').insert(fields);
+      if(error) throw error;
+      await logAction('Matériel créé', fields.designation);
+      await refreshAll(); state.view='list';
+      showToast('Fiche créée');
+    }
+  }catch(err){ showToast(err.message); }
+  state.busy=false; render();
+}
+function startAddControl(equipId){ newControlDraft(); controlDraft._equipId=equipId; state.view='addControl'; render(); }
+function cancelAddControl(){ state.detailId = controlDraft._equipId; state.view='detail'; render(); }
+function pickControlPhoto(){ syncControlDraftFromDom(); pickPhoto(async (raw)=>{ controlDraft.photo = await resizeDataUrl(raw, 900, 0.65); render(); }); }
+function clearSignature(){ if(!sigCtx) return; sigCtx.clearRect(0,0,sigCanvas.width,sigCanvas.height); sigEmpty=true; }
+async function saveControl(){
+  const date = document.getElementById('c-date').value;
+  const verificateur = document.getElementById('c-verificateur').value.trim();
+  const statut = document.getElementById('c-statut').value;
+  const observations = document.getElementById('c-observations').value.trim();
+  if(!date || !verificateur){ showToast('Date et vérificateur obligatoires'); return; }
+  if(sigEmpty){ showToast('La signature du vérificateur est requise'); return; }
+  const sigDataUrl = sigCanvas.toDataURL('image/png');
+  state.busy=true; render();
+  try{
+    const cId = uid();
+    let photo_url=null, signature_url=null;
+    if(controlDraft.photo) photo_url = await uploadImage(controlDraft.photo, `${state.unit.id}/controls/${cId}-photo.jpg`);
+    signature_url = await uploadImage(sigDataUrl, `${state.unit.id}/controls/${cId}-sig.png`);
+    const equip = state.equipment.find(x=>x.id===controlDraft._equipId);
+    const { error } = await sb.from('controls').insert({
+      equipment_id: controlDraft._equipId, unit_id: state.unit.id, date,
+      verificateur_id: state.session.user.id, verificateur_name: verificateur,
+      statut, observations,
+      photo_url, signature_url
+    });
+    if(error) throw error;
+    await logAction('Contrôle ajouté', `${equip?equip.designation:''} — ${fmtDate(date)}`);
+    await refreshAll(); state.detailId = controlDraft._equipId; state.view='detail';
+    showToast('Contrôle enregistré');
+  }catch(err){ showToast(err.message); }
+  state.busy=false; render();
+}
+
+/* ---- Prêts & missions ---- */
+let loanDraft = {};
+function allLoans(){ return state.equipment.flatMap(e => (e.loans||[]).map(l=>Object.assign({}, l, {_equip:e}))); }
+function groupLoansByBatch(loans){ const groups={}; loans.forEach(l=>{ const k=l.batch_id||l.id; (groups[k]=groups[k]||[]).push(l); }); return groups; }
+function setLoanTab(t){ state.loanTab=t; render(); }
+function renderLoansTab(){
+  const tab = state.loanTab;
+  const loans = allLoans().filter(l=>l.type===tab);
+  const pending = loans.filter(l=>l.status==='en_attente');
+  const current = loans.filter(l=>l.status==='en_cours');
+  const past = loans.filter(l=>l.status==='restitue' || l.status==='refuse').sort((a,b)=>(b.checkout_date||'').localeCompare(a.checkout_date||''));
+  const pendingGroups = groupLoansByBatch(pending);
+  const currentGroups = groupLoansByBatch(current);
+  const pastGroups = groupLoansByBatch(past);
+  return `
+  <h2>${tab==='pret'?'Prêts de matériel':'Sorties en mission'}</h2>
+  <div class="tabs">
+    <button class="tab ${tab==='pret'?'active':''}" onclick="setLoanTab('pret')">Prêts</button>
+    <button class="tab ${tab==='mission'?'active':''}" onclick="setLoanTab('mission')">Missions</button>
+  </div>
+  ${can('gererPret')?`<button class="btn btn-primary" style="margin-bottom:18px;" onclick="startCheckout('${tab}')">+ ${tab==='pret'?'Nouveau prêt':'Nouvelle sortie mission'}</button>`:''}
+  ${Object.keys(pendingGroups).length>0?`<h3 style="margin-bottom:10px;color:var(--warn);">En attente de validation</h3>${Object.keys(pendingGroups).map(k=>renderLoanBatchCard(pendingGroups[k], tab, 'en_attente')).join('')}<div class="divider"></div>`:''}
+  <h3 style="margin-bottom:10px;">En cours</h3>
+  ${Object.keys(currentGroups).length===0?'<p class="muted" style="margin-bottom:20px;">Rien en cours.</p>':Object.keys(currentGroups).map(k=>renderLoanBatchCard(currentGroups[k], tab, 'en_cours')).join('')}
+  <div class="divider"></div>
+  <h3 style="margin-bottom:10px;">Historique</h3>
+  ${Object.keys(pastGroups).length===0?'<p class="muted">Aucun historique.</p>':Object.keys(pastGroups).map(k=>renderLoanBatchCard(pastGroups[k], tab, 'past')).join('')}
+  `;
+}
+function renderLoanBatchCard(items, type, status){
+  const first = items[0];
+  const key = first.batch_id||first.id;
+  const isPast = status==='past';
+  return `
+  <div class="card tap" onclick="openBatchDetail('${key}','${type}')">
+    <div class="row" style="align-items:flex-start;">
+      <div>
+        <div style="font-weight:600;">${esc(first.borrower_name)}</div>
+        <div class="muted" style="font-size:12px;">${type==='pret'?'Perçu':'Sorti'} le ${fmtDate(first.checkout_date)}${first.expected_return_date?' · retour prévu '+fmtDate(first.expected_return_date):''}</div>
+        ${status==='en_attente'?`<div class="muted" style="font-size:12px;">Proposé par ${esc(first.created_by_name)}</div>`:''}
+      </div>
+      ${isPast?`<span class="badge ${first.status==='refuse'?'badge-danger':first.return_condition==='endommage'?'badge-danger':first.return_condition==='reserve'?'badge-warn':'badge-ok'}">${first.status==='refuse'?'Refusé':fmtDate(first.return_date)}</span>`:''}
+      ${status==='en_attente'?`<span class="badge badge-warn">À valider</span>`:''}
+    </div>
+    <div style="margin-top:10px;">
+      ${items.map(l=>`<div class="muted" style="font-size:13px;padding:5px 0;border-top:1px solid var(--border);">${esc(l._equip.designation)} <span class="mono">${esc(l._equip.numero_serie||'')}</span></div>`).join('')}
+    </div>
+    ${status==='en_cours' && can('gererPret') ? `<button class="btn btn-primary" style="margin-top:12px;" onclick="event.stopPropagation(); startBatchReturn('${key}','${type}')">${type==='pret'?'Marquer restitué':'Marquer rentré'}</button>` : ''}
+    ${status==='en_attente' && can('validerPret') ? `<div class="btn-row" style="margin-top:12px;">
+      <button class="btn btn-primary" onclick="event.stopPropagation(); validateLoanBatch('${key}')">Valider</button>
+      <button class="btn btn-danger" onclick="event.stopPropagation(); rejectLoanBatch('${key}')">Refuser</button>
+    </div>` : ''}
+    ${isPast && first.return_signature_url ? `<img src="${imgSrc(first.return_signature_url)}" onerror="imgFallback(this)" style="height:36px;background:#fff;border-radius:4px;margin-top:8px;">`:''}
+  </div>`;
+}
+function openBatchDetail(batchKey, type){ state.batchDetailKey=batchKey; state.batchDetailType=type; state.view='batchDetail'; render(); }
+function renderBatchDetailView(){
+  const batchKey = state.batchDetailKey, type = state.batchDetailType;
+  const items = allLoans().filter(l=>(l.batch_id||l.id)===batchKey && l.type===type);
+  if(items.length===0) return `<div class="backlink" onclick="goto('loans')">‹ Retour</div><div class="empty">Introuvable.</div>`;
+  const first = items[0];
+  const isCurrent = first.status==='en_cours';
+  const isPending = first.status==='en_attente';
+  const statusLabel = isPending?'En attente de validation':isCurrent?'En cours':(first.status==='refuse'?'Refusé':'Terminé');
+  return `
+  <div class="backlink" onclick="goto('loans')">‹ Retour</div>
+  <h2>${esc(first.borrower_name)}</h2>
+  <p class="muted" style="margin-bottom:16px;">${type==='pret'?'Prêt':'Sortie mission'} · ${statusLabel}${isPending?' · proposé par '+esc(first.created_by_name):''}</p>
+  <div class="card">
+    <div class="field"><label>Date de ${type==='pret'?'perception':'sortie'}</label><p>${fmtDate(first.checkout_date)}</p></div>
+    ${first.expected_return_date?`<div class="field"><label>Retour prévu</label><p>${fmtDate(first.expected_return_date)}</p></div>`:''}
+    <div class="field"><label>Signature à la ${type==='pret'?'perception':'sortie'}</label>
+      ${first.checkout_signature_url?`<img src="${imgSrc(first.checkout_signature_url)}" onerror="imgFallback(this)" style="width:100%;max-width:340px;display:block;background:#fff;border-radius:8px;border:1px solid var(--border);padding:10px;">`:'<p class="muted">Aucune signature.</p>'}
+    </div>
+  </div>
+  ${isPending && can('validerPret') ? `<div class="btn-row" style="margin-bottom:16px;">
+    <button class="btn btn-primary" onclick="validateLoanBatch('${batchKey}')">Valider</button>
+    <button class="btn btn-danger" onclick="rejectLoanBatch('${batchKey}')">Refuser</button>
+  </div>` : ''}
+  <h3 style="margin-bottom:10px;">Matériel (${items.length})</h3>
+  ${items.map(l=>`
+    <div class="card tap" onclick="state.detailId='${l._equip.id}'; state.view='detail'; render();">
+      <div class="row"><div><div style="font-weight:600;">${esc(l._equip.designation)}</div><div class="mono muted" style="font-size:12px;">${esc(l._equip.numero_serie||'')}</div></div><span class="muted">›</span></div>
+    </div>`).join('')}
+  ${(first.status==='restitue') ? `
+  <h3 style="margin:20px 0 10px;">${type==='pret'?'Restitution':'Retour'}</h3>
+  <div class="card">
+    <div class="field"><label>Date</label><p>${fmtDate(first.return_date)}</p></div>
+    ${first.return_condition?`<div class="field"><label>État</label><p>${first.return_condition==='endommage'?'Endommagé':first.return_condition==='reserve'?'Avec réserve':'Bon état'}</p></div>`:''}
+    ${first.returned_by_name?`<div class="field"><label>Restitué par</label><p>${esc(first.returned_by_name)}</p></div>`:''}
+    ${first.return_signature_url?`<div class="field"><label>Signature</label><img src="${imgSrc(first.return_signature_url)}" onerror="imgFallback(this)" style="width:100%;max-width:340px;display:block;background:#fff;border-radius:8px;border:1px solid var(--border);padding:10px;"></div>`:''}
+  </div>` : (isCurrent && can('gererPret') ? `<button class="btn btn-primary" style="margin:16px 0 48px;" onclick="startBatchReturn('${batchKey}','${type}')">${type==='pret'?'Marquer restitué':'Marquer rentré'}</button>` : '')}
+  `;
+}
+async function validateLoanBatch(batchKey){
+  const items = allLoans().filter(l=>(l.batch_id||l.id)===batchKey && l.status==='en_attente');
+  const ids = items.map(l=>l.id);
+  const { error } = await sb.from('loans').update({status:'en_cours'}).in('id', ids);
+  if(error){ showToast(error.message); return; }
+  await logAction('Prêt validé', `${items[0]?items[0].borrower_name:''} — ${items.length} article(s)`);
+  await refreshAll(); if(state.view==='batchDetail') state.view='loans'; render();
+  showToast('Prêt validé');
+}
+async function rejectLoanBatch(batchKey){
+  if(!confirm('Refuser ce prêt ?')) return;
+  const items = allLoans().filter(l=>(l.batch_id||l.id)===batchKey && l.status==='en_attente');
+  const ids = items.map(l=>l.id);
+  const { error } = await sb.from('loans').update({status:'refuse'}).in('id', ids);
+  if(error){ showToast(error.message); return; }
+  await logAction('Prêt refusé', `${items[0]?items[0].borrower_name:''}`);
+  await refreshAll(); if(state.view==='batchDetail') state.view='loans'; render();
+  showToast('Prêt refusé');
+}
+function startCheckout(type){ state.checkoutType=type; state.checkoutSelection=[]; state.view='checkout'; render(); }
+function renderCheckout(){
+  const type = state.checkoutType;
+  const available = state.equipment.filter(e=>!(e.loans||[]).some(l=>l.status==='en_cours'||l.status==='en_attente')).slice().sort((a,b)=>(a.designation||'').localeCompare(b.designation||''));
+  const n = state.checkoutSelection.length;
+  return `
+  <div class="backlink" onclick="goto('loans')">‹ Annuler</div>
+  <h2>${type==='pret'?'Nouveau prêt':'Nouvelle sortie mission'}</h2>
+  <div class="card">
+    <div class="field"><label>${type==='pret'?"Nom de l'emprunteur":'Intitulé de la mission / responsable'}</label><input id="co-name" placeholder="${type==='pret'?'Prénom Nom':'Ex. Mission Verdon — Cne Dupont'}"></div>
+    <div class="field"><label>Date de ${type==='pret'?'perception':'sortie'}</label><input id="co-date" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+    ${type==='pret'?`<div class="field"><label>Date de retour prévue (optionnelle)</label><input id="co-expected" type="date"></div>`:''}
+    <div class="field"><label>Signature (à la ${type==='pret'?'perception':'sortie'})</label>
+      <canvas id="sigpad" class="sigpad"></canvas>
+      <button type="button" class="btn btn-ghost" style="width:auto;margin-top:6px;" onclick="clearSignature()">Effacer la signature</button>
+    </div>
+  </div>
+  <h3 id="co-count-header" style="margin-bottom:10px;">Sélectionner le matériel (${n} sélectionné${n!==1?'s':''})</h3>
+  ${available.length===0?'<p class="muted">Aucun matériel disponible (tout est déjà prêté/sorti).</p>':available.map(e=>`
+    <div class="card tap" onclick="const cb=this.querySelector('input[type=checkbox]'); if(event.target!==cb){ cb.checked=!cb.checked; cb.dispatchEvent(new Event('change')); }">
+      <div class="row">
+        <div class="row" style="gap:12px;">
+          <input type="checkbox" ${state.checkoutSelection.includes(e.id)?'checked':''} onchange="onCheckoutCheckboxChange('${e.id}', this.checked)" style="width:20px;height:20px;flex-shrink:0;accent-color:var(--accent);">
+          ${e.photo_url?`<img class="thumb" src="${imgSrc(e.photo_url)}">`:`<div class="thumb"></div>`}
+          <div><div style="font-weight:600;font-size:14px;">${esc(e.designation)}</div><div class="mono muted" style="font-size:12px;">${esc(e.numero_serie||'')}</div></div>
+        </div>
+      </div>
+    </div>`).join('')}
+  <button id="co-submit-btn" class="btn btn-primary" style="margin:16px 0 48px;" ${state.busy?'disabled':''} onclick="saveCheckout()">${state.busy?'<span class="spinner"></span>':'Confirmer ('+n+' article'+(n!==1?'s':'')+')'}</button>
+  `;
+}
+function onCheckoutCheckboxChange(id, checked){
+  const i = state.checkoutSelection.indexOf(id);
+  if(checked && i<0) state.checkoutSelection.push(id);
+  if(!checked && i>=0) state.checkoutSelection.splice(i,1);
+  const n = state.checkoutSelection.length;
+  const header = document.getElementById('co-count-header');
+  if(header) header.textContent = `Sélectionner le matériel (${n} sélectionné${n!==1?'s':''})`;
+  const btn = document.getElementById('co-submit-btn');
+  if(btn && !state.busy) btn.textContent = `Confirmer (${n} article${n!==1?'s':''})`;
+}
+async function saveCheckout(){
+  const name = document.getElementById('co-name').value.trim();
+  const date = document.getElementById('co-date').value;
+  const expectedEl = document.getElementById('co-expected');
+  const expected = expectedEl ? (expectedEl.value||null) : null;
+  if(!name || !date){ showToast('Nom et date requis'); return; }
+  if(state.checkoutSelection.length===0){ showToast('Sélectionne au moins un article'); return; }
+  if(sigEmpty){ showToast('La signature est requise'); return; }
+  const sigDataUrl = sigCanvas.toDataURL('image/png');
+  state.busy=true; render();
+  try{
+    const batchId = genUUID();
+    const sigUrl = await uploadImage(sigDataUrl, `${state.unit.id}/loans/${batchId}-checkout-sig.png`);
+    const needsApproval = (state.checkoutType==='pret' && state.role==='assistant');
+    const rows = state.checkoutSelection.map(eid=>({
+      equipment_id: eid, unit_id: state.unit.id, borrower_name: name, checkout_date: date, expected_return_date: expected,
+      status: needsApproval?'en_attente':'en_cours', type: state.checkoutType, batch_id: batchId, checkout_signature_url: sigUrl,
+      created_by: state.session.user.id, created_by_name: state.myDisplayName
+    }));
+    const { error } = await sb.from('loans').insert(rows);
+    if(error) throw error;
+    await logAction(state.checkoutType==='pret'?(needsApproval?'Prêt proposé':'Prêt enregistré'):'Sortie mission enregistrée', `${name} — ${rows.length} article(s)`);
+    await refreshAll(); state.view='loans';
+    showToast(needsApproval?'Prêt enregistré — en attente de validation':'Enregistré');
+  }catch(err){ showToast(err.message); }
+  state.busy=false; render();
+}
+function startBatchReturn(batchKey, type){ state.batchReturn = {batchKey, type, return_date:new Date().toISOString().slice(0,10)}; state.view='batchReturn'; render(); }
+function renderBatchReturn(){
+  const { batchKey, type } = state.batchReturn;
+  const items = allLoans().filter(l=>(l.batch_id||l.id)===batchKey && l.status==='en_cours');
+  const first = items[0];
+  return `
+  <div class="backlink" onclick="goto('loans')">‹ Annuler</div>
+  <h2>${type==='pret'?'Restitution':'Retour de mission'}</h2>
+  <p class="muted" style="margin-bottom:16px;">${esc(first?first.borrower_name:'')} — ${items.length} article(s)</p>
+  <div class="card">
+    <div class="field"><label>Date de ${type==='pret'?'retour':'rentrée'}</label><input id="br-date" type="date" value="${state.batchReturn.return_date}"></div>
+    ${type==='pret'?`
+    <div class="field"><label>État du matériel</label><select id="br-etat">
+      <option value="bon_etat">Bon état</option><option value="reserve">Avec réserve</option><option value="endommage">Endommagé</option>
+    </select></div>
+    <div class="field"><label>Restitué par</label><input id="br-restituePar" value="${esc(first?first.borrower_name:'')}"></div>
+    <div class="field"><label>Signature</label>
+      <canvas id="sigpad" class="sigpad"></canvas>
+      <button class="btn btn-ghost" style="width:auto;margin-top:6px;" onclick="clearSignature()">Effacer la signature</button>
+    </div>`:''}
+  </div>
+  <button class="btn btn-primary" style="margin-bottom:48px;" ${state.busy?'disabled':''} onclick="saveBatchReturn()">${state.busy?'<span class="spinner"></span>':'Confirmer'}</button>
+  `;
+}
+async function saveBatchReturn(){
+  const { batchKey, type } = state.batchReturn;
+  const date = document.getElementById('br-date').value;
+  if(!date){ showToast('Date requise'); return; }
+  const payload = { return_date: date, status:'restitue' };
+  if(type==='pret'){
+    const etat = document.getElementById('br-etat').value;
+    const restituePar = document.getElementById('br-restituePar').value.trim();
+    if(!restituePar){ showToast('Nom requis'); return; }
+    if(sigEmpty){ showToast('La signature est requise'); return; }
+    const sigDataUrl = sigCanvas.toDataURL('image/png');
+    state.busy=true; render();
+    try{
+      const sigUrl = await uploadImage(sigDataUrl, `${state.unit.id}/loans/${uid()}-sig.png`);
+      payload.return_condition = etat; payload.returned_by_name = restituePar; payload.return_signature_url = sigUrl;
+    }catch(err){ showToast(err.message); state.busy=false; render(); return; }
+  } else {
+    state.busy=true; render();
+  }
+  const items = allLoans().filter(l=>(l.batch_id||l.id)===batchKey && l.status==='en_cours');
+  const ids = items.map(l=>l.id);
+  const { error } = await sb.from('loans').update(payload).in('id', ids);
+  state.busy=false;
+  if(error){ showToast(error.message); render(); return; }
+  await logAction(type==='pret'?'Matériel restitué':'Matériel rentré de mission', `${items[0]?items[0].borrower_name:''} — ${items.length} article(s)`);
+  await refreshAll(); state.view='loans'; render();
+  showToast('Enregistré');
+}
+function startLoanOut(equipId){ loanDraft = {equipId, checkout_date:new Date().toISOString().slice(0,10)}; state.view='loanOut'; render(); }
+function cancelLoan(){ state.detailId = loanDraft.equipId; state.view='detail'; render(); }
+function renderLoanOut(){
+  const e = state.equipment.find(x=>x.id===loanDraft.equipId);
+  return `
+  <div class="backlink" onclick="cancelLoan()">‹ Annuler</div>
+  <h2>Prêter ce matériel</h2>
+  <p class="muted" style="margin-bottom:16px;">${esc(e?e.designation:'')} ${e&&e.numero_serie?'· <span class="mono">'+esc(e.numero_serie)+'</span>':''}</p>
+  <div class="card">
+    <div class="field"><label>Nom de l'emprunteur</label><input id="lo-borrower" placeholder="Prénom Nom"></div>
+    <div class="field"><label>Date de perception</label><input id="lo-checkout" type="date" value="${loanDraft.checkout_date}"></div>
+    <div class="field"><label>Date de retour prévue (optionnelle)</label><input id="lo-expected" type="date"></div>
+    <div class="field"><label>Signature (à la perception)</label>
+      <canvas id="sigpad" class="sigpad"></canvas>
+      <button type="button" class="btn btn-ghost" style="width:auto;margin-top:6px;" onclick="clearSignature()">Effacer la signature</button>
+    </div>
+  </div>
+  <button class="btn btn-primary" style="margin-bottom:48px;" ${state.busy?'disabled':''} onclick="saveLoanOut()">${state.busy?'<span class="spinner"></span>':'Confirmer le prêt'}</button>
+  `;
+}
+async function saveLoanOut(){
+  const borrower = document.getElementById('lo-borrower').value.trim();
+  const checkout = document.getElementById('lo-checkout').value;
+  const expected = document.getElementById('lo-expected').value || null;
+  if(!borrower || !checkout){ showToast('Nom et date de perception requis'); return; }
+  if(sigEmpty){ showToast('La signature est requise'); return; }
+  const sigDataUrl = sigCanvas.toDataURL('image/png');
+  state.busy=true; render();
+  try{
+    const e = state.equipment.find(x=>x.id===loanDraft.equipId);
+    const batchId = genUUID();
+    const sigUrl = await uploadImage(sigDataUrl, `${state.unit.id}/loans/${batchId}-checkout-sig.png`);
+    const needsApproval = state.role==='assistant';
+    const { error } = await sb.from('loans').insert({
+      equipment_id: loanDraft.equipId, unit_id: state.unit.id, borrower_name: borrower, checkout_date: checkout,
+      expected_return_date: expected, status: needsApproval?'en_attente':'en_cours', type:'pret', batch_id: batchId, checkout_signature_url: sigUrl,
+      created_by: state.session.user.id, created_by_name: state.myDisplayName
+    });
+    if(error) throw error;
+    await logAction(needsApproval?'Prêt proposé':'Matériel prêté', `${e?e.designation:''} → ${borrower}`);
+    await refreshAll(); state.detailId = loanDraft.equipId; state.view='detail';
+    showToast(needsApproval?'Prêt enregistré — en attente de validation':'Prêt enregistré');
+  }catch(err){ showToast(err.message); }
+  state.busy=false; render();
+}
+function startLoanReturn(equipId, loanId){ loanDraft = {equipId, loanId, return_date:new Date().toISOString().slice(0,10)}; state.view='loanReturn'; render(); }
+function renderLoanReturn(){
+  const e = state.equipment.find(x=>x.id===loanDraft.equipId);
+  const loan = (e.loans||[]).find(l=>l.id===loanDraft.loanId);
+  return `
+  <div class="backlink" onclick="cancelLoan()">‹ Annuler</div>
+  <h2>Restitution du matériel</h2>
+  <p class="muted" style="margin-bottom:16px;">${esc(e?e.designation:'')} — prêté à ${esc(loan?loan.borrower_name:'')}</p>
+  <div class="card">
+    <div class="field"><label>Date de retour</label><input id="lr-date" type="date" value="${loanDraft.return_date}"></div>
+    <div class="field"><label>État du matériel au retour</label><select id="lr-etat">
+      <option value="bon_etat">Bon état</option><option value="reserve">Avec réserve</option><option value="endommage">Endommagé</option>
+    </select></div>
+    <div class="field"><label>Restitué par</label><input id="lr-restituePar" value="${esc(loan?loan.borrower_name:'')}"></div>
+    <div class="field"><label>Signature</label>
+      <canvas id="sigpad" class="sigpad"></canvas>
+      <button class="btn btn-ghost" style="width:auto;margin-top:6px;" onclick="clearSignature()">Effacer la signature</button>
+    </div>
+  </div>
+  <button class="btn btn-primary" style="margin-bottom:48px;" ${state.busy?'disabled':''} onclick="saveLoanReturn()">${state.busy?'<span class="spinner"></span>':'Confirmer la restitution'}</button>
+  `;
+}
+async function saveLoanReturn(){
+  const date_retour = document.getElementById('lr-date').value;
+  const etat = document.getElementById('lr-etat').value;
+  const restituePar = document.getElementById('lr-restituePar').value.trim();
+  if(!date_retour || !restituePar){ showToast('Date et nom requis'); return; }
+  if(sigEmpty){ showToast('La signature est requise'); return; }
+  const sigDataUrl = sigCanvas.toDataURL('image/png');
+  state.busy=true; render();
+  try{
+    const sigUrl = await uploadImage(sigDataUrl, `${state.unit.id}/loans/${uid()}-sig.png`);
+    const e = state.equipment.find(x=>x.id===loanDraft.equipId);
+    const { error } = await sb.from('loans').update({
+      return_date: date_retour, return_condition: etat, returned_by_name: restituePar, return_signature_url: sigUrl, status:'restitue'
+    }).eq('id', loanDraft.loanId);
+    if(error) throw error;
+    await logAction('Matériel restitué', `${e?e.designation:''} par ${restituePar}`);
+    await refreshAll(); state.detailId = loanDraft.equipId; state.view='detail';
+    showToast('Restitution enregistrée');
+  }catch(err){ showToast(err.message); }
+  state.busy=false; render();
+}
+
+/* ---------- Post-render wiring ---------- */
+function afterRender(){
+  if(state.view==='auth' && typeof turnstile==='undefined' && !window.__tsRetry){ window.__tsRetry=setTimeout(function(){ window.__tsRetry=null; if(typeof turnstile!=='undefined') afterRender(); },800); }
+  if(state.view==='auth' && (state.authMode==='signup' || state.authMode==='login') && typeof turnstile!=='undefined'){
+    const el = document.querySelector('.cf-turnstile');
+    if(el && !el.dataset.rendered){
+      el.dataset.rendered='1';
+      turnstile.render(el, { sitekey: TURNSTILE_SITE_KEY, theme:'dark',
+        callback: function(token){ turnstileToken = token; },
+        'expired-callback': function(){ turnstileToken = null; },
+        'error-callback': function(code){ turnstileToken = null; showToast('Captcha Cloudflare (widget) : erreur ' + code + ' — vérifie le nom de domaine autorisé dans Turnstile'); return true; } });
+    }
+  }
+  if(state.view==='addControl' || state.view==='loanOut' || state.view==='loanReturn' || state.view==='checkout' || state.view==='batchReturn'){
+    sigCanvas = document.getElementById('sigpad');
+    if(sigCanvas){
+      const ratio = window.devicePixelRatio||1; const rect = sigCanvas.getBoundingClientRect();
+      sigCanvas.width = rect.width*ratio; sigCanvas.height = rect.height*ratio;
+      sigCtx = sigCanvas.getContext('2d'); sigCtx.scale(ratio,ratio);
+      sigCtx.strokeStyle='#1a1a1a'; sigCtx.lineWidth=2.2; sigCtx.lineCap='round';
+      sigEmpty=true; let last=null;
+      const pos = (ev)=>{ const r=sigCanvas.getBoundingClientRect(); const p=ev.touches?ev.touches[0]:ev; return {x:p.clientX-r.left,y:p.clientY-r.top}; };
+      const start=(ev)=>{ ev.preventDefault(); sigDrawing=true; last=pos(ev); };
+      const move=(ev)=>{ if(!sigDrawing) return; ev.preventDefault(); const p=pos(ev); sigCtx.beginPath(); sigCtx.moveTo(last.x,last.y); sigCtx.lineTo(p.x,p.y); sigCtx.stroke(); last=p; sigEmpty=false; };
+      const end=()=>{ sigDrawing=false; };
+      sigCanvas.addEventListener('mousedown', start); sigCanvas.addEventListener('mousemove', move); window.addEventListener('mouseup', end);
+      sigCanvas.addEventListener('touchstart', start, {passive:false}); sigCanvas.addEventListener('touchmove', move, {passive:false}); sigCanvas.addEventListener('touchend', end);
+    }
+  }
+}
+window.addEventListener('error', function(e){
+  console.error('Erreur registre matériel:', e.error||e.message);
+  if(state.view==='loading'){ state.loadError = e.message||'Erreur JavaScript au chargement.'; state.view='error'; render(); }
+});
+/* ---- Déconnexion automatique après inactivité ---- */
+const INACTIVITY_LIMIT_MS = 2 * 60 * 60 * 1000; // 2 heures
+let lastActivityAt = Date.now();
+['click','keydown','touchstart','mousemove','scroll'].forEach(evt=>{
+  document.addEventListener(evt, ()=>{ lastActivityAt = Date.now(); }, {passive:true});
+});
+setInterval(()=>{
+  if(state.session && Date.now() - lastActivityAt > INACTIVITY_LIMIT_MS){
+    doLogout();
+  }
+}, 60000);
+
+if(sb) init();
+</script>
+</body>
+</html>

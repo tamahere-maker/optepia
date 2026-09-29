@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Vue d'ensemble — Registre Matériel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#14181A; --surface:#1C2226; --surface2:#252C30; --border:#374046;
+    --text:#ECEFEF; --text-muted:#8B979E; --accent:#5B8CFF; --accent-dim:#3F6BDB;
+    --ok:#4F9D69; --warn:#D9A441; --danger:#C1443A;
+    --font-head:'Barlow Condensed',sans-serif; --font-body:'Inter',sans-serif; --font-mono:'JetBrains Mono',monospace;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--font-body);height:100%;}
+  body{padding-bottom:40px;min-height:100vh;}
+  h1,h2,h3{font-family:var(--font-head);font-weight:600;margin:0 0 4px 0;}
+  h1{font-size:24px;} h2{font-size:19px;} h3{font-size:15px;color:var(--text-muted);}
+  p{margin:0;} button{font-family:var(--font-body);cursor:pointer;border:none;}
+  input{font-family:var(--font-body);}
+  .topbar{position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:1px solid var(--border);padding:14px 16px;display:flex;align-items:center;justify-content:space-between;}
+  .topbar small{color:var(--accent);text-transform:uppercase;letter-spacing:1px;font-size:10px;font-weight:700;}
+  main{padding:16px;max-width:760px;margin:0 auto;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:12px;}
+  .card.tap{cursor:pointer;}
+  .card.tap:active{border-color:var(--accent);}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:12px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;}
+  .field input{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:11px 12px;font-size:15px;}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 18px;border-radius:8px;font-size:14px;font-weight:600;width:100%;}
+  .btn-primary{background:var(--accent);color:#fff;}
+  .btn-primary:disabled{opacity:0.5;}
+  .badge{font-size:10px;text-transform:uppercase;letter-spacing:0.5px;padding:3px 8px;border-radius:20px;font-weight:700;}
+  .badge-ok{background:rgba(79,157,105,0.18);color:var(--ok);}
+  .badge-warn{background:rgba(217,164,65,0.18);color:var(--warn);}
+  .badge-danger{background:rgba(193,68,58,0.18);color:var(--danger);}
+  .badge-ro{background:rgba(91,140,255,0.18);color:var(--accent);}
+  .mono{font-family:var(--font-mono);font-size:13px;}
+  .muted{color:var(--text-muted);font-size:13px;}
+  .thumb{width:44px;height:44px;border-radius:8px;object-fit:cover;background:var(--surface2);border:1px solid var(--border);flex-shrink:0;}
+  .search{margin-bottom:14px;}
+  .search input{width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px 12px;font-size:14px;}
+  .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;}
+  .stat{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;}
+  .stat b{font-family:var(--font-head);font-size:26px;display:block;}
+  .tabs{display:flex;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:4px;margin-bottom:16px;overflow-x:auto;}
+  .tab{flex-shrink:0;padding:9px 14px;border-radius:7px;font-size:12px;font-weight:600;color:var(--text-muted);background:transparent;}
+  .tab.active{background:var(--accent);color:#fff;}
+  .backlink{display:flex;align-items:center;gap:6px;color:var(--text-muted);font-size:13px;margin-bottom:14px;font-weight:600;cursor:pointer;}
+  .empty{text-align:center;padding:50px 20px;color:var(--text-muted);}
+  .item-row{padding:10px 0;border-top:1px solid var(--border);}
+  .item-row:first-child{border-top:none;}
+  .spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.35);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js" onerror="window.__sbLoadFailed=true;"></script>
+<script>
+const SUPABASE_URL = 'https://djgetorzygsanetsxlzn.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRqZ2V0b3J6eWdzYW5ldHN4bHpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkxNjUyNDcsImV4cCI6MjEwNDc0MTI0N30.YoCSv80O1Fexd9ETTh_mfNhtqI_wu6cxTxiPR_lT1kA';
+const FUNCTIONS_URL = SUPABASE_URL + '/functions/v1';
+let sb = null;
+try{
+  if(typeof supabase === 'undefined' || window.__sbLoadFailed) throw new Error("La librairie Supabase n'a pas pu se charger. Vérifie ta connexion et réessaie.");
+  sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+}catch(e){
+  document.getElementById('app').innerHTML = '<div style="padding:60px 24px;text-align:center;color:#ECEFEF;font-family:sans-serif;"><h2>Erreur de chargement</h2><p style="color:#8B979E;">'+e.message+'</p></div>';
+}
+
+let state = { view:'loading', session:null, isAdmin:false, units:[], allMembers:[], allEquipment:[], platformStats:null, storageByUnit:{}, userEmails:{}, unitDetailId:null, unitTab:'materiel', search:'', busy:false, error:null };
+
+function esc(s){ return (s||'').toString().replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+let signedUrlCache = {};
+async function resolveSignedUrls(paths){
+  const uniq = [...new Set((paths||[]).filter(Boolean))];
+  const now = Date.now();
+  const need = uniq.filter(p=>!signedUrlCache[p] || signedUrlCache[p].expires < now + 5*60*1000);
+  if(need.length===0) return;
+  try{
+    const { data, error } = await sb.storage.from('registre-materiel').createSignedUrls(need, 3600);
+    if(error) throw error;
+    let failCount = 0; let firstErr = '';
+    (data||[]).forEach(d=>{
+      if(d.signedUrl) signedUrlCache[d.path] = { url: d.signedUrl, expires: now + 3600*1000 };
+      else { failCount++; if(!firstErr && d.error) firstErr = d.error; }
+    });
+    if(failCount>0) state.error = `${failCount} lien(s) image non générés${firstErr?' — '+firstErr:''} (droits insuffisants sur ces fichiers ?)`;
+  }catch(e){ state.error = "Erreur liens images : " + (e.message||String(e)); }
+}
+function imgSrc(v){ if(!v) return ''; const cached = signedUrlCache[v]; return cached ? cached.url : ''; }
+function imgFallback(imgEl){
+  const url = imgEl.src;
+  const div = document.createElement('div');
+  div.className = 'muted'; div.style.fontSize='11px';
+  div.textContent = 'Image indisponible';
+  imgEl.replaceWith(div);
+}
+function fmtDate(d){ if(!d) return '—'; const p=(''+d).slice(0,10).split('-'); if(p.length!==3) return d; return `${p[2]}/${p[1]}/${p[0]}`; }
+function fmtDateTime(d){ if(!d) return '—'; const dt=new Date(d); return dt.toLocaleDateString('fr-FR')+' '+dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}); }
+function daysUntil(d){ if(!d) return null; const t=new Date((''+d).slice(0,10)+'T00:00:00'); const n=new Date(); n.setHours(0,0,0,0); return Math.round((t-n)/86400000); }
+function addYears(d,n){ if(!d) return null; const p=(''+d).slice(0,10).split('-').map(Number); return new Date(p[0]+n,p[1]-1,p[2]).toISOString().slice(0,10); }
+function statusOf(e){
+  const dfv = daysUntil(e.date_fin_vie);
+  if(dfv!==null && dfv<0) return {label:'Hors service', cls:'badge-danger'};
+  const controls = e.controls||[];
+  const last = controls.length ? controls.slice().sort((a,b)=>b.date.localeCompare(a.date))[0] : null;
+  if(last){
+    const dNext = daysUntil(addYears(last.date,1));
+    if(dNext!==null && dNext<0) return {label:'Contrôle dépassé', cls:'badge-danger'};
+    if(dNext!==null && dNext<30) return {label:'Contrôle proche', cls:'badge-warn'};
+  } else { return {label:'Jamais contrôlé', cls:'badge-warn'}; }
+  if(dfv!==null && dfv<60) return {label:'Fin de vie proche', cls:'badge-warn'};
+  return {label:'Conforme', cls:'badge-ok'};
+}
+
+async function init(){
+  if(!sb) return;
+  const { data:{ session } } = await sb.auth.getSession();
+  state.session = session;
+  if(!session){ state.view='login'; render(); return; }
+  await checkAdminAndLoad();
+}
+async function checkAdminAndLoad(){
+  try{
+    const { data } = await sb.from('platform_admins').select('user_id').eq('user_id', state.session.user.id).maybeSingle();
+    state.isAdmin = !!data;
+    if(!state.isAdmin){ state.view='denied'; render(); return; }
+    await loadAll();
+    state.view='units';
+  }catch(err){ state.error = err.message; state.view='denied'; }
+  render();
+}
+async function loadAll(){
+  const [unitsRes, membersRes, equipRes, statsRes, storageRes, emailsRes] = await Promise.all([
+    sb.from('units').select('*'),
+    sb.from('unit_members').select('*'),
+    sb.from('equipment').select('*, controls(*), loans(*)'),
+    sb.rpc('get_platform_stats'),
+    sb.rpc('get_storage_stats_by_unit'),
+    sb.rpc('get_user_emails')
+  ]);
+  state.units = (unitsRes.data||[]).sort((a,b)=>a.name.localeCompare(b.name));
+  state.allMembers = membersRes.data || [];
+  state.allEquipment = equipRes.data || [];
+  state.platformStats = (statsRes.data && statsRes.data[0]) || null;
+  state.storageByUnit = {};
+  (storageRes.data||[]).forEach(row=>{ state.storageByUnit[row.unit_id] = row; });
+  state.userEmails = {};
+  if(emailsRes.error){
+    state.error = "Emails indisponibles : " + emailsRes.error.message;
+  } else {
+    (emailsRes.data||[]).forEach(row=>{ state.userEmails[row.user_id] = row.email; });
+  }
+  const paths = [];
+  state.units.forEach(u=>paths.push(u.avatar_url));
+  state.allMembers.forEach(m=>paths.push(m.avatar_url));
+  state.allEquipment.forEach(e=>paths.push(e.photo_url));
+  resolveSignedUrls(paths).then(render);
+}
+function formatBytes(bytes){
+  if(bytes===null || bytes===undefined) return '—';
+  if(bytes < 1024) return bytes + ' o';
+  if(bytes < 1024*1024) return (bytes/1024).toFixed(0) + ' Ko';
+  if(bytes < 1024*1024*1024) return (bytes/(1024*1024)).toFixed(1) + ' Mo';
+  return (bytes/(1024*1024*1024)).toFixed(2) + ' Go';
+}
+async function doLogin(){
+  const email = document.getElementById('au-email').value.trim();
+  const password = document.getElementById('au-password').value;
+  if(!email || !password){ showErr('Email et mot de passe requis'); return; }
+  state.busy=true; render();
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  state.busy=false;
+  if(error){ showErr(error.message); render(); return; }
+  state.session = data.session;
+  await checkAdminAndLoad();
+}
+async function doLogout(){
+  await sb.auth.signOut();
+  state = { view:'login', session:null, isAdmin:false, units:[], allMembers:[], allEquipment:[], platformStats:null, storageByUnit:{}, userEmails:{}, unitDetailId:null, unitTab:'materiel', search:'', busy:false, error:null };
+  render();
+}
+function showErr(msg){ state.error = msg; render(); setTimeout(()=>{ state.error=null; render(); }, 3000); }
+
+function membersOf(unitId){ return state.allMembers.filter(m=>m.unit_id===unitId); }
+function equipmentOf(unitId){ return state.allEquipment.filter(e=>e.unit_id===unitId); }
+function allLoansOf(unitId){ return equipmentOf(unitId).flatMap(e=>(e.loans||[]).map(l=>Object.assign({},l,{_equip:e}))); }
+
+function render(){
+  const app = document.getElementById('app');
+  let html = '';
+  if(state.view==='loading'){
+    html = `<div style="padding:70px 20px;text-align:center;color:var(--text-muted);">Chargement…</div>`;
+  } else if(state.view==='login'){
+    html = renderLogin();
+  } else if(state.view==='denied'){
+    html = `<div style="padding:70px 24px;text-align:center;max-width:420px;margin:0 auto;">
+      <h1>Accès non autorisé</h1>
+      <p class="muted" style="margin:14px 0 22px;">Ce compte n'a pas les droits de super-administrateur.${state.error?' ('+esc(state.error)+')':''}</p>
+      <button class="btn btn-primary" onclick="doLogout()">Se déconnecter</button>
+    </div>`;
+  } else {
+    html = renderTopbar() + '<main>' + renderView() + '</main>';
+  }
+  if(state.error && state.view!=='denied') html += `<div style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--surface2);border:1px solid var(--border);padding:10px 18px;border-radius:20px;font-size:13px;">${esc(state.error)}</div>`;
+  app.innerHTML = html;
+}
+function renderLogin(){
+  return `
+  <div style="padding:70px 24px;max-width:400px;margin:0 auto;">
+    <h1>Vue d'ensemble</h1>
+    <p class="muted" style="margin-bottom:24px;">Accès super-administrateur — lecture seule, toutes unités.</p>
+    <div class="field"><label>Email</label><input id="au-email" type="email"></div>
+    <div class="field"><label>Mot de passe</label><input id="au-password" type="password"></div>
+    <button class="btn btn-primary" ${state.busy?'disabled':''} onclick="doLogin()">${state.busy?'<span class="spinner"></span>':'Se connecter'}</button>
+  </div>`;
+}
+function renderTopbar(){
+  return `
+  <div class="topbar">
+    <div><h2 style="margin:0;">Vue d'ensemble</h2><small>Lecture seule · super-administrateur</small></div>
+    <button class="btn" style="width:auto;background:var(--surface2);color:var(--text);border:1px solid var(--border);padding:8px 14px;" onclick="doLogout()">Déconnexion</button>
+  </div>`;
+}
+function renderView(){
+  if(state.view==='unitDetail') return renderUnitDetail();
+  return renderUnitsList();
+}
+
+function renderUnitsList(){
+  const totalEquip = state.allEquipment.length;
+  const totalMembers = state.allMembers.length;
+  const totalHorsService = state.allEquipment.filter(e=>statusOf(e).cls==='badge-danger').length;
+  const totalLoansActive = state.allEquipment.flatMap(e=>e.loans||[]).filter(l=>l.status==='en_cours').length;
+  const q = state.search.toLowerCase();
+  const units = state.units.filter(u=>!q || u.name.toLowerCase().includes(q));
+  return `
+  <div class="stat-grid">
+    <div class="stat"><b>${state.units.length}</b><span class="muted">Unités</span></div>
+    <div class="stat"><b>${totalMembers}</b><span class="muted">Membres au total</span></div>
+    <div class="stat"><b>${totalEquip}</b><span class="muted">Matériel au total</span></div>
+    <div class="stat"><b style="color:${totalHorsService>0?'var(--danger)':'var(--text)'};">${totalHorsService}</b><span class="muted">Hors service</span></div>
+  </div>
+  ${renderResourceUsage()}
+  <div class="card">
+    <button class="btn btn-primary" ${state.busy?'disabled':''} onclick="downloadGlobalBackup()">${state.busy?'<span class="spinner"></span>':'Exporter toutes les unités (JSON)'}</button>
+    <p class="muted" style="font-size:11px;margin-top:8px;">Complément manuel aux sauvegardes automatiques Supabase (Pro) — pas un remplacement.</p>
+  </div>
+  <div class="search"><input placeholder="Rechercher une unité…" value="${esc(state.search)}" oninput="onSearch(this.value)"></div>
+  <div id="units-results">${renderUnitsResults(units)}</div>
+  `;
+}
+async function downloadGlobalBackup(){
+  state.busy=true; render();
+  try{
+    const payload = {
+      export_date: new Date().toISOString(),
+      units: state.units,
+      members: state.allMembers,
+      equipment: state.allEquipment
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob); const a=document.createElement('a');
+    a.href=url; a.download=`sauvegarde-globale-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  }catch(err){ showErr(err.message); }
+  state.busy=false; render();
+}
+function renderUsageBar(usedBytes, capBytes){
+  const pct = capBytes ? Math.min(100, (usedBytes/capBytes)*100) : 0;
+  const color = pct>90?'var(--danger)':pct>70?'var(--warn)':'var(--accent)';
+  return `<div style="background:var(--surface2);border-radius:6px;height:8px;overflow:hidden;margin:6px 0 4px;"><div style="width:${pct.toFixed(1)}%;height:100%;background:${color};"></div></div>`;
+}
+function renderResourceUsage(){
+  const s = state.platformStats;
+  if(!s) return `<div class="card"><p class="muted">Statistiques de consommation indisponibles (fonction non installée ou droits insuffisants).</p></div>`;
+  const FREE_DB = 500*1024*1024, FREE_STORAGE = 1024*1024*1024;
+  const PRO_DB = 8*1024*1024*1024, PRO_STORAGE = 100*1024*1024*1024;
+  return `
+  <div class="card">
+    <h3 style="margin-bottom:10px;color:var(--text);">Consommation Supabase</h3>
+    <p class="muted" style="font-size:12px;margin-bottom:2px;">Base de données</p>
+    <div class="row" style="font-size:13px;"><b>${formatBytes(s.db_size_bytes)}</b><span class="muted">/ 500 Mo (gratuit) · 8 Go (Pro)</span></div>
+    ${renderUsageBar(s.db_size_bytes, FREE_DB)}
+    <p class="muted" style="font-size:12px;margin:12px 0 2px;">Stockage fichiers (${s.storage_file_count} fichier(s))</p>
+    <div class="row" style="font-size:13px;"><b>${formatBytes(s.storage_total_bytes)}</b><span class="muted">/ 1 Go (gratuit) · 100 Go (Pro)</span></div>
+    ${renderUsageBar(s.storage_total_bytes, FREE_STORAGE)}
+    <p class="muted" style="font-size:11px;margin-top:6px;">Bande passante Supabase non disponible ici — à vérifier dans Supabase (Reports). Idem pour Netlify — à consulter directement sur app.netlify.com.</p>
+  </div>`;
+}
+function renderUnitsResults(units){
+  if(units.length===0) return `<div class="empty">Aucune unité.</div>`;
+  return units.map(u=>{
+    const m = membersOf(u.id), e = equipmentOf(u.id);
+    const horsService = e.filter(x=>statusOf(x).cls==='badge-danger').length;
+    return `
+    <div class="card tap" onclick="openUnit('${u.id}')">
+      <div class="row">
+        <div class="row" style="gap:10px;">
+          ${u.avatar_url?`<img class="thumb" src="${imgSrc(u.avatar_url)}" onerror="imgFallback(this)">`:`<div class="thumb"></div>`}
+          <div>
+            <div style="font-weight:600;font-size:15px;">${esc(u.name)}</div>
+            <div class="muted">${m.length} membre(s) · ${e.length} matériel(s)${horsService>0?` · <span style="color:var(--danger);">${horsService} hors service</span>`:''}</div>
+          </div>
+        </div>
+        <span class="muted">›</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+function onSearch(v){
+  state.search = v;
+  const units = state.units.filter(u=>!v.toLowerCase() || u.name.toLowerCase().includes(v.toLowerCase()));
+  document.getElementById('units-results').innerHTML = renderUnitsResults(units);
+}
+function openUnit(id){ state.unitDetailId=id; state.unitTab='materiel'; state.view='unitDetail'; render(); }
+function setUnitTab(t){ state.unitTab=t; render(); }
+
+function renderUnitDetail(){
+  const u = state.units.find(x=>x.id===state.unitDetailId);
+  if(!u) return `<div class="empty">Introuvable.</div>`;
+  const members = membersOf(u.id);
+  const equipment = equipmentOf(u.id);
+  const loans = allLoansOf(u.id);
+  const owner = members.find(m=>m.user_id===u.owner_id);
+  const storage = state.storageByUnit[u.id];
+  return `
+  <div class="backlink" onclick="state.view='units'; render();">‹ Toutes les unités</div>
+  <div class="row" style="align-items:flex-start;margin-bottom:16px;">
+    <div class="row" style="gap:12px;">
+      ${u.avatar_url?`<img class="thumb" src="${imgSrc(u.avatar_url)}" style="width:56px;height:56px;" onerror="imgFallback(this)">`:''}
+      <div><h1 style="margin:0;">${esc(u.name)}</h1><p class="muted">Créée le ${fmtDate(u.created_at)}${owner?' · propriétaire : '+esc(owner.display_name):''}${storage?' · stockage : '+formatBytes(storage.total_bytes)+' ('+storage.file_count+' fichier(s))':''}</p></div>
+    </div>
+  </div>
+  <div class="tabs">
+    <button class="tab ${state.unitTab==='materiel'?'active':''}" onclick="setUnitTab('materiel')">Matériel (${equipment.length})</button>
+    <button class="tab ${state.unitTab==='equipe'?'active':''}" onclick="setUnitTab('equipe')">Équipe (${members.length})</button>
+    <button class="tab ${state.unitTab==='prets'?'active':''}" onclick="setUnitTab('prets')">Prêts (${loans.length})</button>
+    <button class="tab ${state.unitTab==='journal'?'active':''}" onclick="setUnitTab('journal')">Journal</button>
+  </div>
+  ${state.unitTab==='materiel' ? renderUnitEquipment(equipment) : ''}
+  ${state.unitTab==='equipe' ? renderUnitMembers(members, u) : ''}
+  ${state.unitTab==='prets' ? renderUnitLoans(loans) : ''}
+  ${state.unitTab==='journal' ? renderUnitJournal(u.id) : ''}
+  <div class="card" style="border-color:var(--danger);margin-top:20px;">
+    <h3 style="color:var(--danger);margin-bottom:6px;">Zone sensible</h3>
+    <p class="muted" style="font-size:12px;margin-bottom:10px;">Supprime définitivement l'unité, tout son matériel, ses membres, prêts, contrôles et fichiers associés. Irréversible.</p>
+    <button style="width:auto;background:transparent;color:var(--danger);border:1px solid var(--danger);border-radius:6px;padding:10px 16px;font-size:13px;" ${state.busy?'disabled':''} onclick="deleteUnitEntirely('${u.id}','${esc(u.name)}')">Supprimer cette unité</button>
+  </div>
+  `;
+}
+async function deleteUnitEntirely(unitId, name){
+  const typed = prompt(`Pour confirmer, tape exactement le nom de l'unité : ${name}`);
+  if(typed !== name){ if(typed!==null) showErr('Nom incorrect, suppression annulée.'); return; }
+  state.busy=true; render();
+  const { error } = await sb.rpc('delete_unit_as_admin', { target_unit_id: unitId });
+  state.busy=false;
+  if(error){ showErr(error.message); render(); return; }
+  state.view='units';
+  await loadAll();
+  render();
+}
+function renderUnitEquipment(equipment){
+  if(equipment.length===0) return `<div class="empty">Aucun matériel.</div>`;
+  const sorted = equipment.slice().sort((a,b)=>(a.designation||'').localeCompare(b.designation||''));
+  return `<div class="card">${sorted.map(e=>{
+    const s = statusOf(e);
+    return `<div class="item-row">
+      <div class="row">
+        <div class="row" style="gap:10px;">
+          ${e.photo_url?`<img class="thumb" src="${imgSrc(e.photo_url)}" onerror="imgFallback(this)">`:`<div class="thumb"></div>`}
+          <div>
+            <div style="font-weight:600;font-size:14px;">${esc(e.designation)||'—'}</div>
+            <div class="muted">${esc(e.marque)||'—'} · <span class="mono">${esc(e.numero_serie)||'—'}</span></div>
+          </div>
+        </div>
+        <span class="badge ${s.cls}">${s.label}</span>
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+}
+function renderUnitMembers(members, unit){
+  if(members.length===0) return `<div class="empty">Aucun membre.</div>`;
+  const ROLE_LABELS = {administrateur:'Administrateur',verificateur:'Vérificateur',assistant:'Assistant',lecteur:'Lecteur'};
+  return `<div class="card">${members.slice().sort((a,b)=>a.display_name.localeCompare(b.display_name)).map(m=>`
+    <div class="item-row">
+      <div class="row" style="align-items:flex-start;">
+        <div class="row" style="gap:10px;">
+          ${m.avatar_url?`<img class="thumb" src="${imgSrc(m.avatar_url)}" style="border-radius:50%;" onerror="imgFallback(this)">`:`<div class="thumb" style="border-radius:50%;"></div>`}
+          <div>
+            <div style="font-weight:600;font-size:14px;">${esc(m.display_name)}</div>
+            <div class="muted" style="font-size:11px;">${esc(state.userEmails[m.user_id]||'—')}</div>
+          </div>
+        </div>
+        <span class="muted" style="text-align:right;flex-shrink:0;">${ROLE_LABELS[m.role]||m.role}${m.user_id===unit.owner_id?' · Propriétaire':''}</span>
+      </div>
+      <div class="row" style="gap:8px;margin-top:8px;justify-content:flex-end;">
+        <button style="width:auto;background:var(--surface2);color:var(--text-muted);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:11px;" onclick="removeMemberFromUnit('${m.id}','${esc(m.display_name)}','${unit.id}')">Retirer de l'unité</button>
+        <button style="width:auto;background:transparent;color:var(--danger);border:1px solid var(--danger);border-radius:6px;padding:6px 10px;font-size:11px;" onclick="deleteAccountEntirely('${m.user_id}','${esc(m.display_name)}')">Supprimer le compte</button>
+      </div>
+    </div>`).join('')}</div>`;
+}
+async function removeMemberFromUnit(memberId, name, unitId){
+  if(!confirm(`Retirer ${name} de cette unité ? Son compte reste utilisable ailleurs.`)) return;
+  const { error } = await sb.from('unit_members').delete().eq('id', memberId);
+  if(error){ showErr(error.message); return; }
+  await loadAll();
+  render();
+}
+async function deleteAccountEntirely(userId, name){
+  if(!confirm(`Supprimer DÉFINITIVEMENT le compte de ${name} ? Son login disparaît de toutes les unités. L'historique du matériel qu'elle a créé/contrôlé reste (nom conservé), mais le compte lui-même est irrécupérable.`)) return;
+  state.busy=true; render();
+  try{
+    const res = await fetch(FUNCTIONS_URL + '/admin-delete-user', {
+      method:'POST',
+      headers: { 'Content-Type':'application/json', Authorization:'Bearer ' + state.session.access_token },
+      body: JSON.stringify({ targetUserId: userId })
+    });
+    if(!res.ok){ throw new Error(await res.text()); }
+    await loadAll();
+    if(state.view==='unitDetail') state.view='unitDetail';
+  }catch(err){ showErr(err.message); }
+  state.busy=false; render();
+}
+function renderUnitLoans(loans){
+  if(loans.length===0) return `<div class="empty">Aucun prêt ni mission.</div>`;
+  const sorted = loans.slice().sort((a,b)=>(b.checkout_date||'').localeCompare(a.checkout_date||''));
+  return `<div class="card">${sorted.map(l=>{
+    const statusLabel = l.status==='en_cours'?'En cours':l.status==='en_attente'?'En attente':l.status==='refuse'?'Refusé':'Terminé';
+    const cls = l.status==='en_cours'?'badge-ok':l.status==='en_attente'?'badge-warn':l.status==='refuse'?'badge-danger':'badge-ro';
+    return `<div class="item-row">
+      <div class="row">
+        <div>
+          <div style="font-weight:600;font-size:14px;">${esc(l.borrower_name)} · ${l.type==='mission'?'Mission':'Prêt'}</div>
+          <div class="muted">${esc(l._equip.designation)} · ${fmtDate(l.checkout_date)}</div>
+        </div>
+        <span class="badge ${cls}">${statusLabel}</span>
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+}
+let journalCache = {};
+function renderUnitJournal(unitId){
+  if(!journalCache[unitId]){
+    journalCache[unitId] = 'loading';
+    sb.from('audit_log').select('*').eq('unit_id', unitId).order('created_at',{ascending:false}).limit(60).then(({data})=>{
+      journalCache[unitId] = data || [];
+      if(state.view==='unitDetail' && state.unitDetailId===unitId && state.unitTab==='journal') render();
+    });
+    return `<div class="muted">Chargement…</div>`;
+  }
+  if(journalCache[unitId]==='loading') return `<div class="muted">Chargement…</div>`;
+  const entries = journalCache[unitId];
+  if(entries.length===0) return `<div class="empty">Aucune action enregistrée.</div>`;
+  return `<div class="card">${entries.map(j=>`
+    <div class="item-row">
+      <div class="row"><b style="font-size:13px;">${esc(j.action)}</b><span class="muted" style="font-size:11px;">${fmtDateTime(j.created_at)}</span></div>
+      <p class="muted" style="font-size:12px;margin-top:2px;">${esc(j.user_name)}${j.target_label?' · '+esc(j.target_label):''}</p>
+    </div>`).join('')}</div>`;
+}
+
+init();
+</script>
+</body>
+</html>
