@@ -60,10 +60,13 @@
 <body>
 <div id="app"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js" onerror="window.__sbLoadFailed=true;"></script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <script>
 const SUPABASE_URL = 'https://djgetorzygsanetsxlzn.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRqZ2V0b3J6eWdzYW5ldHN4bHpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkxNjUyNDcsImV4cCI6MjEwNDc0MTI0N30.YoCSv80O1Fexd9ETTh_mfNhtqI_wu6cxTxiPR_lT1kA';
 const FUNCTIONS_URL = SUPABASE_URL + '/functions/v1';
+const TURNSTILE_SITE_KEY = '0x4AAAAAAFIxtzEQNiT-i15G';
+let turnstileToken = null;
 let sb = null;
 try{
   if(typeof supabase === 'undefined' || window.__sbLoadFailed) throw new Error("La librairie Supabase n'a pas pu se charger. Vérifie ta connexion et réessaie.");
@@ -173,8 +176,10 @@ async function doLogin(){
   const email = document.getElementById('au-email').value.trim();
   const password = document.getElementById('au-password').value;
   if(!email || !password){ showErr('Email et mot de passe requis'); return; }
+  if(!turnstileToken){ showErr('Merci de valider le contrôle anti-robot'); return; }
+  const captchaToken = turnstileToken; turnstileToken = null; /* jeton à usage unique */
   state.busy=true; render();
-  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  const { data, error } = await sb.auth.signInWithPassword({ email, password, options:{ captchaToken } });
   state.busy=false;
   if(error){ showErr(error.message); render(); return; }
   state.session = data.session;
@@ -209,6 +214,19 @@ function render(){
   }
   if(state.error && state.view!=='denied') html += `<div style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--surface2);border:1px solid var(--border);padding:10px 18px;border-radius:20px;font-size:13px;">${esc(state.error)}</div>`;
   app.innerHTML = html;
+  mountTurnstile();
+}
+function mountTurnstile(){
+  if(state.view!=='login') return;
+  if(typeof turnstile==='undefined'){ if(!window.__tsRetry){ window.__tsRetry=setTimeout(function(){ window.__tsRetry=null; mountTurnstile(); },800); } return; }
+  const el = document.querySelector('.cf-turnstile');
+  if(el && !el.dataset.rendered){
+    el.dataset.rendered='1';
+    turnstile.render(el, { sitekey: TURNSTILE_SITE_KEY, theme:'dark',
+      callback: function(t){ turnstileToken = t; },
+      'expired-callback': function(){ turnstileToken = null; },
+      'error-callback': function(code){ turnstileToken = null; state.error='Captcha Cloudflare : erreur ' + code + ' (domaine non autorisé dans Turnstile ?)'; return true; } });
+  }
 }
 function renderLogin(){
   return `
@@ -217,6 +235,7 @@ function renderLogin(){
     <p class="muted" style="margin-bottom:24px;">Accès super-administrateur — lecture seule, toutes unités.</p>
     <div class="field"><label>Email</label><input id="au-email" type="email"></div>
     <div class="field"><label>Mot de passe</label><input id="au-password" type="password"></div>
+    <div class="cf-turnstile" data-theme="dark" style="margin-bottom:14px;"></div>
     <button class="btn btn-primary" ${state.busy?'disabled':''} onclick="doLogin()">${state.busy?'<span class="spinner"></span>':'Se connecter'}</button>
   </div>`;
 }
