@@ -996,6 +996,9 @@ function renderProfile(){
   </div>
   <div class="card">
     <h3 style="margin-bottom:10px;">Mot de passe</h3>
+    <div class="field"><label>Mot de passe actuel</label>
+      <div style="display:flex;gap:8px;"><input id="pw-current" type="password" autocomplete="current-password" style="flex:1;"><button type="button" class="btn btn-ghost" style="width:auto;" onclick="togglePwVisibility('pw-current',this)">👁</button></div>
+    </div>
     <div class="field"><label>Nouveau mot de passe</label>
       <div style="display:flex;gap:8px;"><input id="pw-new" type="password" style="flex:1;"><button type="button" class="btn btn-ghost" style="width:auto;" onclick="togglePwVisibility('pw-new',this)">👁</button></div>
     </div>
@@ -1108,11 +1111,20 @@ async function leaveUnit(){
   showToast("Tu as quitté l'unité");
 }
 async function changePassword(){
+  const cur = document.getElementById('pw-current').value;
   const pw = document.getElementById('pw-new').value;
   const pw2 = document.getElementById('pw-confirm').value;
+  if(!cur){ showToast('Saisis ton mot de passe actuel'); return; }
   if(pw.length<8){ showToast('8 caractères minimum'); return; }
   if(pw!==pw2){ showToast('Les mots de passe ne correspondent pas'); return; }
+  if(pw===cur){ showToast("Le nouveau mot de passe doit être différent de l'actuel"); return; }
   state.busy=true; render();
+  const { data: okCur, error: verifErr } = await sb.rpc('verify_current_password', { current_pw: cur });
+  if(verifErr || okCur!==true){
+    state.busy=false;
+    showToast(verifErr ? verifErr.message : 'Mot de passe actuel incorrect');
+    render(); return;
+  }
   const { error } = await sb.auth.updateUser({ password: pw });
   state.busy=false;
   if(error){ showToast(error.message); render(); return; }
