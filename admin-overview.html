@@ -420,7 +420,7 @@ function renderUnitMembers(members, unit){
       </div>
       <div class="row" style="gap:8px;margin-top:8px;justify-content:flex-end;">
         <button style="width:auto;background:var(--surface2);color:var(--text-muted);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:11px;" onclick="removeMemberFromUnit('${m.id}','${esc(m.display_name)}','${unit.id}')">Retirer de l'unité</button>
-        <button style="width:auto;background:transparent;color:var(--danger);border:1px solid var(--danger);border-radius:6px;padding:6px 10px;font-size:11px;" onclick="deleteAccountEntirely('${m.user_id}','${esc(m.display_name)}')">Supprimer le compte</button>
+        ${m.user_id===state.session.user.id ? `<span class="muted" style="font-size:11px;align-self:center;">Ton compte</span>` : `<button style="width:auto;background:transparent;color:var(--danger);border:1px solid var(--danger);border-radius:6px;padding:6px 10px;font-size:11px;" onclick="deleteAccountEntirely('${m.user_id}','${esc(m.display_name)}')">Supprimer le compte</button>`}
       </div>
     </div>`).join('')}</div>`;
 }
@@ -432,6 +432,7 @@ async function removeMemberFromUnit(memberId, name, unitId){
   render();
 }
 async function deleteAccountEntirely(userId, name){
+  if(userId===state.session.user.id){ showErr('Tu ne peux pas supprimer ton propre compte'); return; }
   if(!confirm(`Supprimer DÉFINITIVEMENT le compte de ${name} ? Son login disparaît de toutes les unités. L'historique du matériel qu'elle a créé/contrôlé reste (nom conservé), mais le compte lui-même est irrécupérable.`)) return;
   state.busy=true; render();
   try{
