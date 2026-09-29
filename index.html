@@ -1042,10 +1042,10 @@ function renderProfile(){
           <select onchange="changeRole('${m.id}', this.value, '${esc(m.display_name)}')" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 8px;font-size:12px;">
             <option value="lecteur" ${m.role==='lecteur'?'selected':''}>Lecteur</option>
             <option value="assistant" ${m.role==='assistant'?'selected':''}>Assistant</option>
-            <option value="verificateur" ${m.role==='verificateur'?'selected':''}>Vérificateur</option>
-            <option value="administrateur" ${m.role==='administrateur'?'selected':''}>Administrateur</option>
+            ${state.role==='administrateur' ? `<option value="verificateur" ${m.role==='verificateur'?'selected':''}>Vérificateur</option>
+            <option value="administrateur" ${m.role==='administrateur'?'selected':''}>Administrateur</option>` : ''}
           </select>
-          <button class="btn btn-ghost" style="width:auto;padding:6px 8px;color:var(--danger);" onclick="removeMember('${m.id}','${esc(m.display_name)}')">✕</button>
+          ${state.role==='administrateur' ? `<button class="btn btn-ghost" style="width:auto;padding:6px 8px;color:var(--danger);" onclick="removeMember('${m.id}','${esc(m.display_name)}')">✕</button>` : ''}
         </div>`:''}
       </div>
     </div>`).join('')}
