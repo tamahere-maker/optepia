@@ -199,6 +199,8 @@ function initials(name){ return (name||'?').split(' ').map(w=>w[0]).join('').sli
 function showToast(msg){ state.toast=msg; render(); setTimeout(()=>{ state.toast=null; render(); }, 2400); }
 function fmtDate(d){ if(!d) return '—'; const p=(''+d).slice(0,10).split('-'); if(p.length!==3) return d; return `${p[2]}/${p[1]}/${p[0]}`; }
 function fmtDateTime(d){ if(!d) return '—'; const dt=new Date(d); return dt.toLocaleDateString('fr-FR')+' '+dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}); }
+function fmtHM(ts){ if(!ts) return ''; const dt=new Date(ts); if(isNaN(dt)) return ''; return dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}); }
+function fmtDT(date, ts){ const h=fmtHM(ts); return fmtDate(date)+(h?' à '+h:''); }
 function daysUntil(d){ if(!d) return null; const t=new Date((''+d).slice(0,10)+'T00:00:00'); const n=new Date(); n.setHours(0,0,0,0); return Math.round((t-n)/86400000); }
 function addYears(d,n){ if(!d) return null; const p=(''+d).slice(0,10).split('-').map(Number); return new Date(p[0]+n,p[1]-1,p[2]).toISOString().slice(0,10); }
 function statusOf(e){
@@ -843,7 +845,7 @@ function renderLoanSection(e){
     html += `
     <div class="card">
       <p><b>En prêt à ${esc(current.borrower_name)}</b></p>
-      <p class="muted" style="margin-top:4px;">Perçu le ${fmtDate(current.checkout_date)}${current.expected_return_date?' · retour prévu le '+fmtDate(current.expected_return_date):''}</p>
+      <p class="muted" style="margin-top:4px;">Perçu le ${fmtDT(current.checkout_date,current.checkout_at)}${current.expected_return_date?' · retour prévu le '+fmtDate(current.expected_return_date):''}</p>
       ${can('gererPret')?`<button class="btn btn-primary" style="margin-top:12px;" onclick="startLoanReturn('${e.id}','${current.id}')">Marquer comme restitué</button>`:''}
     </div>`;
   } else if(can('gererPret')){
@@ -855,7 +857,7 @@ function renderLoanSection(e){
     html += past.map(l=>`
       <div class="control-item">
         <div class="row"><span class="cdate">${esc(l.borrower_name)}</span><span class="badge ${l.return_condition==='endommage'?'badge-danger':l.return_condition==='reserve'?'badge-warn':'badge-ok'}">${l.return_condition==='endommage'?'Endommagé':l.return_condition==='reserve'?'Avec réserve':'Bon état'}</span></div>
-        <p class="muted" style="margin:4px 0;">Perçu le ${fmtDate(l.checkout_date)} · restitué le ${fmtDate(l.return_date)} par ${esc(l.returned_by_name||l.borrower_name)}</p>
+        <p class="muted" style="margin:4px 0;">Perçu le ${fmtDT(l.checkout_date,l.checkout_at)} · restitué le ${fmtDT(l.return_date,l.returned_at)} par ${esc(l.returned_by_name||l.borrower_name)}</p>
         ${l.return_signature_url?`<img src="${imgSrc(l.return_signature_url)}" style="height:36px;background:#fff;border-radius:4px;">`:''}
       </div>`).join('');
   }
@@ -981,7 +983,7 @@ function renderApprovals(){
     const items = pendingLoans[k]; const first = items[0];
     return `<div class="card">
       <div style="font-weight:600;">${esc(first.borrower_name)}</div>
-      <p class="muted" style="font-size:12px;">Proposé par ${esc(first.created_by_name)} · ${fmtDate(first.checkout_date)}</p>
+      <p class="muted" style="font-size:12px;">Proposé par ${esc(first.created_by_name)} · ${fmtDT(first.checkout_date,first.checkout_at)}</p>
       <div style="margin:8px 0;">${items.map(l=>`<div class="muted" style="font-size:13px;padding:4px 0;border-top:1px solid var(--border);">${esc(l._equip.designation)}</div>`).join('')}</div>
       ${first.checkout_signature_url?`<img src="${imgSrc(first.checkout_signature_url)}" onerror="imgFallback(this)" style="height:40px;background:#fff;border-radius:4px;">`:''}
       <div class="btn-row" style="margin-top:10px;">
@@ -1704,10 +1706,11 @@ function renderLoanBatchCard(items, type, status){
     <div class="row" style="align-items:flex-start;">
       <div>
         <div style="font-weight:600;">${esc(first.borrower_name)}</div>
-        <div class="muted" style="font-size:12px;">${type==='pret'?'Perçu':'Sorti'} le ${fmtDate(first.checkout_date)}${first.expected_return_date?' · retour prévu '+fmtDate(first.expected_return_date):''}</div>
+        <div class="muted" style="font-size:12px;">${type==='pret'?'Perçu':'Sorti'} le ${fmtDT(first.checkout_date,first.checkout_at)}${first.expected_return_date?' · retour prévu '+fmtDate(first.expected_return_date):''}</div>
         ${status==='en_attente'?`<div class="muted" style="font-size:12px;">Proposé par ${esc(first.created_by_name)}</div>`:''}
+        ${isPast && first.status==='refuse' && first.refusal_reason?`<div style="font-size:12px;color:var(--danger);margin-top:2px;">Motif : ${esc(first.refusal_reason)}</div>`:''}
       </div>
-      ${isPast?`<span class="badge ${first.status==='refuse'?'badge-danger':first.return_condition==='endommage'?'badge-danger':first.return_condition==='reserve'?'badge-warn':'badge-ok'}">${first.status==='refuse'?'Refusé':fmtDate(first.return_date)}</span>`:''}
+      ${isPast?`<span class="badge ${first.status==='refuse'?'badge-danger':first.return_condition==='endommage'?'badge-danger':first.return_condition==='reserve'?'badge-warn':'badge-ok'}">${first.status==='refuse'?'Refusé':fmtDT(first.return_date,first.returned_at)}</span>`:''}
       ${status==='en_attente'?`<span class="badge badge-warn">À valider</span>`:''}
     </div>
     <div style="margin-top:10px;">
@@ -1735,12 +1738,13 @@ function renderBatchDetailView(){
   <h2>${esc(first.borrower_name)}</h2>
   <p class="muted" style="margin-bottom:16px;">${type==='pret'?'Prêt':'Sortie mission'} · ${statusLabel}${isPending?' · proposé par '+esc(first.created_by_name):''}</p>
   <div class="card">
-    <div class="field"><label>Date de ${type==='pret'?'perception':'sortie'}</label><p>${fmtDate(first.checkout_date)}</p></div>
+    <div class="field"><label>Date de ${type==='pret'?'perception':'sortie'}</label><p>${fmtDT(first.checkout_date,first.checkout_at)}</p></div>
     ${first.expected_return_date?`<div class="field"><label>Retour prévu</label><p>${fmtDate(first.expected_return_date)}</p></div>`:''}
     <div class="field"><label>Signature à la ${type==='pret'?'perception':'sortie'}</label>
       ${first.checkout_signature_url?`<img src="${imgSrc(first.checkout_signature_url)}" onerror="imgFallback(this)" style="width:100%;max-width:340px;display:block;background:#fff;border-radius:8px;border:1px solid var(--border);padding:10px;">`:'<p class="muted">Aucune signature.</p>'}
     </div>
   </div>
+  ${first.status==='refuse'?`<div class="card" style="border-color:var(--danger);"><div class="field" style="margin:0;"><label>Prêt refusé — motif</label><p>${first.refusal_reason?esc(first.refusal_reason):'<span class="muted">Aucun motif renseigné.</span>'}</p></div></div>`:''}
   ${isPending && can('validerPret') ? `<div class="btn-row" style="margin-bottom:16px;">
     <button class="btn btn-primary" onclick="validateLoanBatch('${batchKey}')">Valider</button>
     <button class="btn btn-danger" onclick="rejectLoanBatch('${batchKey}')">Refuser</button>
@@ -1753,7 +1757,7 @@ function renderBatchDetailView(){
   ${(first.status==='restitue') ? `
   <h3 style="margin:20px 0 10px;">${type==='pret'?'Restitution':'Retour'}</h3>
   <div class="card">
-    <div class="field"><label>Date</label><p>${fmtDate(first.return_date)}</p></div>
+    <div class="field"><label>Date</label><p>${fmtDT(first.return_date,first.returned_at)}</p></div>
     ${first.return_condition?`<div class="field"><label>État</label><p>${first.return_condition==='endommage'?'Endommagé':first.return_condition==='reserve'?'Avec réserve':'Bon état'}</p></div>`:''}
     ${first.returned_by_name?`<div class="field"><label>Restitué par</label><p>${esc(first.returned_by_name)}</p></div>`:''}
     ${first.return_signature_url?`<div class="field"><label>Signature</label><img src="${imgSrc(first.return_signature_url)}" onerror="imgFallback(this)" style="width:100%;max-width:340px;display:block;background:#fff;border-radius:8px;border:1px solid var(--border);padding:10px;"></div>`:''}
@@ -1770,12 +1774,15 @@ async function validateLoanBatch(batchKey){
   showToast('Prêt validé');
 }
 async function rejectLoanBatch(batchKey){
-  if(!confirm('Refuser ce prêt ?')) return;
+  const motif = prompt('Motif du refus (sera envoyé au demandeur) :');
+  if(motif===null) return;
+  const reason = motif.trim();
+  if(!reason){ showToast('Le motif du refus est requis'); return; }
   const items = allLoans().filter(l=>(l.batch_id||l.id)===batchKey && l.status==='en_attente');
   const ids = items.map(l=>l.id);
-  const { error } = await sb.from('loans').update({status:'refuse'}).in('id', ids);
+  const { error } = await sb.from('loans').update({status:'refuse', refusal_reason:reason}).in('id', ids);
   if(error){ showToast(error.message); return; }
-  await logAction('Prêt refusé', `${items[0]?items[0].borrower_name:''}`);
+  await logAction('Prêt refusé', `${items[0]?items[0].borrower_name:''} — motif : ${reason}`);
   await refreshAll(); if(state.view==='batchDetail') state.view='loans'; render();
   showToast('Prêt refusé');
 }
@@ -1875,7 +1882,7 @@ async function saveBatchReturn(){
   const { batchKey, type } = state.batchReturn;
   const date = document.getElementById('br-date').value;
   if(!date){ showToast('Date requise'); return; }
-  const payload = { return_date: date, status:'restitue' };
+  const payload = { return_date: date, returned_at: new Date().toISOString(), status:'restitue' };
   if(type==='pret'){
     const etat = document.getElementById('br-etat').value;
     const restituePar = document.getElementById('br-restituePar').value.trim();
@@ -1978,7 +1985,7 @@ async function saveLoanReturn(){
     const sigUrl = await uploadImage(sigDataUrl, `${state.unit.id}/loans/${uid()}-sig.png`);
     const e = state.equipment.find(x=>x.id===loanDraft.equipId);
     const { error } = await sb.from('loans').update({
-      return_date: date_retour, return_condition: etat, returned_by_name: restituePar, return_signature_url: sigUrl, status:'restitue'
+      return_date: date_retour, returned_at: new Date().toISOString(), return_condition: etat, returned_by_name: restituePar, return_signature_url: sigUrl, status:'restitue'
     }).eq('id', loanDraft.loanId);
     if(error) throw error;
     await logAction('Matériel restitué', `${e?e.designation:''} par ${restituePar}`);
