@@ -7,21 +7,26 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="icon-180.png">
-<meta name="theme-color" content="#E4572E">
+<meta name="theme-color" content="#0B1014">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#181D20; --surface:#20272B; --surface2:#2A3237; --border:#3A434A;
-    --text:#ECEFEF; --text-muted:#8B979E; --accent:#E4572E; --accent-dim:#B8431F;
-    --ok:#4F9D69; --warn:#D9A441; --danger:#C1443A;
-    --font-head:'Barlow Condensed',sans-serif; --font-body:'Inter',sans-serif; --font-mono:'JetBrains Mono',monospace;
+    --bg:#0B1014; --surface:#121A20; --surface2:#1A242C; --border:#27343E;
+    --text:#EEF3F5; --text-muted:#8A9AA5; --accent:#FF7A1A; --accent-dim:#E0590A;
+    --ok:#22D39A; --warn:#FFB21F; --danger:#FF5468;
+    --on-accent:#0B1014; --brand-grad:linear-gradient(135deg,#FF5B02 0%,#FF9A0A 55%,#FFB800 100%);
+    --ok-bg:rgba(34,211,154,0.15); --warn-bg:rgba(255,178,31,0.16); --danger-bg:rgba(255,84,104,0.16);
+    --font-head:'Sora',sans-serif; --font-body:'Inter',sans-serif; --font-mono:'JetBrains Mono',monospace;
   }
   :root[data-theme="light"]{
-    --bg:#F5F3EF; --surface:#FFFFFF; --surface2:#ECE8E1; --border:#DAD5CC;
-    --text:#22282B; --text-muted:#6B7378; --accent:#D14E27; --accent-dim:#B8431F;
-    --ok:#3D8256; --warn:#B8811F; --danger:#B23A30;
+    --bg:#F3F6F7; --surface:#FFFFFF; --surface2:#E8EEF0; --border:#D3DCE1;
+    --text:#0F1A20; --text-muted:#5A6A74; --accent:#D94F00; --accent-dim:#B54000;
+    --ok:#0C8A63; --warn:#A86A00; --danger:#C4243A;
+    --ok-bg:rgba(12,138,99,0.12); --warn-bg:rgba(168,106,0,0.13); --danger-bg:rgba(196,36,58,0.11);
   }
+  .logo-wm{display:block;height:auto;}
+  :root[data-theme="light"] .logo-wm{filter:brightness(0) saturate(100%);opacity:.9;}
   .pw-rules{margin:8px 0 2px;padding:0;list-style:none;font-size:12px;color:var(--text-muted);}
   .pw-rules li{display:flex;align-items:center;gap:8px;padding:2px 0;transition:color .15s;}
   .pw-rules .box{width:16px;height:16px;border:1.5px solid var(--border);border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;line-height:1;color:transparent;flex-shrink:0;transition:all .15s;}
@@ -31,7 +36,7 @@
   html,body{margin:0;padding:0;max-width:100%;overflow-x:hidden;background:var(--bg);color:var(--text);font-family:var(--font-body);height:100%;}
   body{padding-bottom:calc(120px + env(safe-area-inset-bottom));min-height:100vh;}
   h1,h2,h3{font-family:var(--font-head);font-weight:600;letter-spacing:0.2px;margin:0 0 4px 0;}
-  h1{font-size:26px;} h2{font-size:20px;} h3{font-size:16px;color:var(--text-muted);font-weight:600;}
+  h1{font-size:24px;} h2{font-size:18px;} h3{font-size:15px;color:var(--text-muted);font-weight:600;}
   p{margin:0;} a{color:var(--accent);}
   button{font-family:var(--font-body);cursor:pointer;border:none;}
   input,select,textarea{font-family:var(--font-body);}
@@ -39,7 +44,7 @@
   .topbar .brand{display:flex;flex-direction:row;align-items:center;}
   .topbar .brand small{color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:1px;}
   .user-chip{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:6px 12px 6px 6px;cursor:pointer;}
-  .user-dot{width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;font-family:var(--font-head);flex-shrink:0;}
+  .user-dot{width:26px;height:26px;border-radius:50%;background:var(--brand-grad);color:var(--on-accent);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;font-family:var(--font-head);flex-shrink:0;}
   .user-chip .role{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;display:block;}
   .user-chip .name{font-size:13px;font-weight:600;}
   main{padding:16px;padding-bottom:32px;max-width:640px;margin:0 auto;}
@@ -73,7 +78,7 @@
   .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--accent);}
   .field textarea{resize:vertical;min-height:70px;}
   .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 18px;border-radius:8px;font-size:14px;font-weight:600;width:100%;}
-  .btn-primary{background:var(--accent);color:#fff;} .btn-primary:active{background:var(--accent-dim);}
+  .btn-primary{background:var(--brand-grad);color:var(--on-accent);} .btn-primary:active{filter:brightness(.9);}
   .btn-primary:disabled{opacity:0.5;}
   .btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border);}
   .btn-ghost{background:transparent;color:var(--accent);padding:10px;}
@@ -81,9 +86,9 @@
   .btn-row{display:flex;gap:10px;margin-top:4px;flex-wrap:wrap;}
   .btn-row .btn{flex:1;min-width:110px;}
   .badge{font-size:10px;text-transform:uppercase;letter-spacing:0.5px;padding:3px 8px;border-radius:20px;font-weight:700;}
-  .badge-ok{background:rgba(79,157,105,0.18);color:var(--ok);}
-  .badge-warn{background:rgba(217,164,65,0.18);color:var(--warn);}
-  .badge-danger{background:rgba(193,68,58,0.18);color:var(--danger);}
+  .badge-ok{background:var(--ok-bg);color:var(--ok);}
+  .badge-warn{background:var(--warn-bg);color:var(--warn);}
+  .badge-danger{background:var(--danger-bg);color:var(--danger);}
   .mono{overflow-wrap:anywhere;font-family:var(--font-mono);font-size:13px;letter-spacing:0.3px;}
   .muted{color:var(--text-muted);font-size:13px;}
   .thumb{width:56px;height:56px;border-radius:8px;object-fit:cover;background:var(--surface2);border:1px solid var(--border);flex-shrink:0;}
@@ -93,7 +98,7 @@
   .search input{flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px 12px;font-size:14px;}
   .filter-chips{display:flex;gap:6px;overflow-x:auto;margin-bottom:14px;padding-bottom:2px;}
   .chip{flex-shrink:0;padding:7px 13px;border-radius:20px;font-size:12px;font-weight:600;background:var(--surface);border:1px solid var(--border);color:var(--text-muted);}
-  .chip.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .chip.active{background:var(--brand-grad);color:var(--on-accent);border-color:transparent;font-weight:700;}
   .navbar{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border);display:flex;z-index:10;padding-bottom:env(safe-area-inset-bottom);}
   .navitem{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:9px 1px 7px;color:var(--text-muted);font-size:8.8px;text-transform:uppercase;letter-spacing:0.2px;font-weight:600;background:transparent;}
   .navitem.active{color:var(--accent);}
@@ -115,12 +120,12 @@
   .role-opt{display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:13px 14px;}
   .qr-status{font-size:13px;padding:10px 12px;border-radius:8px;margin-bottom:12px;}
   .qr-status.info{background:rgba(139,151,158,0.12);color:var(--text-muted);}
-  .qr-status.ok{background:rgba(79,157,105,0.15);color:var(--ok);}
-  .qr-status.err{background:rgba(193,68,58,0.15);color:var(--danger);}
+  .qr-status.ok{background:var(--ok-bg);color:var(--ok);}
+  .qr-status.err{background:var(--danger-bg);color:var(--danger);}
   .toast{position:fixed;bottom:84px;left:50%;transform:translateX(-50%);background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:11px 18px;border-radius:20px;font-size:13px;font-weight:600;z-index:30;box-shadow:0 6px 20px rgba(0,0,0,0.4);max-width:88vw;text-align:center;}
   .tabs{display:flex;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:4px;margin-bottom:18px;}
   .tab{flex:1;text-align:center;padding:10px;border-radius:7px;font-size:13px;font-weight:600;color:var(--text-muted);background:transparent;}
-  .tab.active{background:var(--accent);color:#fff;}
+  .tab.active{background:var(--brand-grad);color:var(--on-accent);}
   .code-display{font-family:var(--font-mono);font-size:24px;letter-spacing:4px;text-align:center;padding:14px;background:var(--surface2);border:1px dashed var(--border);border-radius:8px;margin:10px 0;}
   .journal-item{padding:11px 0;border-bottom:1px solid var(--border);}
   .journal-item:last-child{border-bottom:none;}
@@ -156,7 +161,7 @@ const sb = (function(){
         '<div style="padding:60px 24px;text-align:center;max-width:420px;margin:0 auto;color:#ECEFEF;font-family:sans-serif;">'
         + "<h2 style=\"font-family:sans-serif;\">Impossible de charger l'application</h2>"
         + '<p style="color:#8B979E;margin:14px 0;font-size:14px;">' + e.message + '</p>'
-        + '<button onclick="location.reload()" style="background:#E4572E;color:#fff;border:none;padding:12px 20px;border-radius:8px;font-weight:600;font-size:14px;">Réessayer</button>'
+        + '<button onclick="location.reload()" style="background:linear-gradient(135deg,#FF5B02,#FFB800);color:#0B1014;border:none;padding:12px 20px;border-radius:8px;font-weight:600;font-size:14px;">Réessayer</button>'
         + '</div>';
     });
     if(document.readyState !== 'loading'){
@@ -164,7 +169,7 @@ const sb = (function(){
         '<div style="padding:60px 24px;text-align:center;max-width:420px;margin:0 auto;color:#ECEFEF;font-family:sans-serif;">'
         + "<h2 style=\"font-family:sans-serif;\">Impossible de charger l'application</h2>"
         + '<p style="color:#8B979E;margin:14px 0;font-size:14px;">' + e.message + '</p>'
-        + '<button onclick="location.reload()" style="background:#E4572E;color:#fff;border:none;padding:12px 20px;border-radius:8px;font-weight:600;font-size:14px;">Réessayer</button>'
+        + '<button onclick="location.reload()" style="background:linear-gradient(135deg,#FF5B02,#FFB800);color:#0B1014;border:none;padding:12px 20px;border-radius:8px;font-weight:600;font-size:14px;">Réessayer</button>'
         + '</div>';
     }
     return null;
@@ -457,7 +462,7 @@ async function submitPasswordReset(){
 function renderResetPassword(){
   return `
   <div style="padding:56px 24px 24px;max-width:420px;margin:0 auto;">
-    <h1 style="font-size:26px;">Nouveau mot de passe</h1>
+    <h1 style="font-size:22px;">Nouveau mot de passe</h1>
     <p class="muted" style="margin-bottom:22px;">Choisis un nouveau mot de passe pour ton compte OPTEPIA.</p>
     <div class="field"><label>Nouveau mot de passe</label>
       <div style="display:flex;gap:8px;"><input id="rp-new" type="password" style="flex:1;" autocomplete="new-password" oninput="updatePwRules('rp-new')"><button type="button" class="btn btn-ghost" style="width:auto;" onclick="togglePwVisibility('rp-new',this)">👁</button></div>
@@ -655,6 +660,7 @@ function renderTopbar(){
       </div>
       <small style="color:var(--text-muted);font-size:11px;">${esc(ROLES[state.role].label)} · changer d'unité</small>
     </div>
+    <img src="logo-mark.png" alt="Optepia" style="height:34px;width:auto;flex-shrink:0;margin-left:12px;">
   </div>`;
 }
 function renderNav(){
@@ -703,7 +709,7 @@ function renderAuth(){
   if(state.authMode==='confirmSent'){
     return `
     <div style="padding:70px 24px;max-width:420px;margin:0 auto;text-align:center;">
-      <h1 style="font-size:26px;">Vérifie ta boîte mail</h1>
+      <h1 style="font-size:22px;">Vérifie ta boîte mail</h1>
       <p class="muted" style="margin:14px 0 22px;">Un lien de confirmation vient d'être envoyé. Clique dessus, puis reviens ici pour te connecter.</p>
       <button class="btn btn-secondary" onclick="setAuthMode('login')">Retour à la connexion</button>
     </div>`;
@@ -711,7 +717,7 @@ function renderAuth(){
   if(state.authMode==='forgotSent'){
     return `
     <div style="padding:70px 24px;max-width:420px;margin:0 auto;text-align:center;">
-      <h1 style="font-size:26px;">Vérifie ta boîte mail</h1>
+      <h1 style="font-size:22px;">Vérifie ta boîte mail</h1>
       <p class="muted" style="margin:14px 0 22px;">Si un compte existe avec cette adresse, un lien pour choisir un nouveau mot de passe vient d'être envoyé. Pense à regarder dans les courriers indésirables.</p>
       <button class="btn btn-secondary" onclick="setAuthMode('login')">Retour à la connexion</button>
     </div>`;
@@ -719,7 +725,7 @@ function renderAuth(){
   if(state.authMode==='forgot'){
     return `
     <div style="padding:56px 24px 24px;max-width:420px;margin:0 auto;">
-      <h1 style="font-size:26px;">Mot de passe oublié</h1>
+      <h1 style="font-size:22px;">Mot de passe oublié</h1>
       <p class="muted" style="margin-bottom:22px;">Saisis l'adresse email de ton compte : nous t'enverrons un lien pour choisir un nouveau mot de passe.</p>
       <div class="field"><label>Email</label><input id="au-email" type="email" autocomplete="email"></div>
       ${TURNSTILE_SITE_KEY!=='REMPLACE_PAR_TA_CLE_TURNSTILE'?`<div class="cf-turnstile" data-theme="dark" style="margin-bottom:14px;"></div>`:''}
@@ -743,8 +749,11 @@ function renderMfaChallenge(){
 function renderAuthForm(isLogin){
   return `
   <div style="padding:56px 24px 24px;max-width:420px;margin:0 auto;">
-    <h1 style="font-size:28px;">OPTEPIA</h1>
-    <p class="muted" style="margin-bottom:26px;">Suivi du matériel de franchissement opérationnel.</p>
+    <div style="text-align:center;margin-bottom:26px;">
+      <img src="logo-mark.png" alt="" style="height:96px;width:auto;display:block;margin:0 auto 14px;">
+      <img class="logo-wm" src="logo-wordmark.png" alt="OPTEPIA" style="width:190px;margin:0 auto 10px;">
+      <p class="muted" style="font-size:12px;letter-spacing:1.5px;text-transform:uppercase;">Gérez · Contrôlez · Tracez</p>
+    </div>
     <div class="tabs">
       <button class="tab ${isLogin?'active':''}" onclick="setAuthMode('login')">Connexion</button>
       <button class="tab ${!isLogin?'active':''}" onclick="setAuthMode('signup')">Créer un compte</button>
@@ -2316,8 +2325,8 @@ function renderLoanSheet(){
     <p class="muted" style="font-size:12px;margin-bottom:12px;">Dans la fenêtre d'impression, choisis « Enregistrer au format PDF » pour obtenir un fichier.</p>
   </div>
   <div class="sheet">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #E4572E;padding-bottom:8px;margin-bottom:14px;">
-      <div><div style="font-size:20px;font-weight:700;letter-spacing:1px;">OPTEPIA</div><div style="color:#555;">${esc(state.unit.name)}</div></div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #FF7A1A;padding-bottom:8px;margin-bottom:14px;">
+      <div style="display:flex;align-items:center;gap:12px;"><img src="logo-mark.png" alt="" style="height:38px;width:auto;"><div><div style="font-size:19px;font-weight:700;letter-spacing:2px;">OPTEPIA</div><div style="color:#555;">${esc(state.unit.name)}</div></div></div>
       <div style="text-align:right;color:#555;font-size:12px;">Édité le ${now.toLocaleDateString('fr-FR')} à ${now.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}<br>par ${esc(state.myDisplayName)}</div>
     </div>
     <h1 style="font-size:18px;margin:0 0 12px;">${isPret?'Fiche de prêt de matériel':'Fiche de sortie en mission'}</h1>
