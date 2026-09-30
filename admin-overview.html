@@ -253,7 +253,7 @@ function renderView(){
 
 function renderUnitsList(){
   const totalEquip = state.allEquipment.length;
-  const totalMembers = state.allMembers.length;
+  const totalMembers = new Set(state.allMembers.map(m=>m.user_id)).size; /* personnes distinctes, même si présentes dans plusieurs unités */
   const totalHorsService = state.allEquipment.filter(e=>statusOf(e).cls==='badge-danger').length;
   const totalLoansActive = state.allEquipment.flatMap(e=>e.loans||[]).filter(l=>l.status==='en_cours').length;
   const q = state.search.toLowerCase();
@@ -261,7 +261,7 @@ function renderUnitsList(){
   return `
   <div class="stat-grid">
     <div class="stat"><b>${state.units.length}</b><span class="muted">Unités</span></div>
-    <div class="stat"><b>${totalMembers}</b><span class="muted">Membres au total</span></div>
+    <div class="stat"><b>${totalMembers}</b><span class="muted">Membres (personnes uniques)</span></div>
     <div class="stat"><b>${totalEquip}</b><span class="muted">Matériel au total</span></div>
     <div class="stat"><b style="color:${totalHorsService>0?'var(--danger)':'var(--text)'};">${totalHorsService}</b><span class="muted">Hors service</span></div>
   </div>
