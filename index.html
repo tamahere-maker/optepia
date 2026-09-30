@@ -122,6 +122,8 @@ const SUPABASE_URL = 'https://djgetorzygsanetsxlzn.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRqZ2V0b3J6eWdzYW5ldHN4bHpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkxNjUyNDcsImV4cCI6MjEwNDc0MTI0N30.YoCSv80O1Fexd9ETTh_mfNhtqI_wu6cxTxiPR_lT1kA';
 const TURNSTILE_SITE_KEY = '0x4AAAAAAFIxtzEQNiT-i15G';
 let turnstileToken = null;
+const RECOVERY_LINK = /[#&?]type=recovery/.test(location.hash + location.search);
+const LINK_ERROR = /[#&?]error_code=/.test(location.hash + location.search);
 const sb = (function(){
   try{
     if(typeof supabase === 'undefined' || window.__sbLoadFailed){
@@ -233,9 +235,15 @@ async function init(){
   state.session = session;
   sb.auth.onAuthStateChange((event, sess)=>{
     state.session = sess;
+    if(event==='PASSWORD_RECOVERY'){ startPasswordReset(); return; }
     if(event==='SIGNED_OUT'){ state.unit=null; state.role=null; state.view='auth'; state.authMode='login'; render(); }
   });
-  if(!session){ state.view='auth'; render(); return; }
+  if(session && RECOVERY_LINK){ await startPasswordReset(); return; }
+  if(!session){
+    state.view='auth';
+    if(LINK_ERROR){ state.authMode='forgot'; history.replaceState(null,'',location.pathname); render(); showToast('Lien invalide ou expiré — refais une demande'); return; }
+    render(); return;
+  }
   await loadUnitContext();
 }
 async function loadUnitContext(){
@@ -367,6 +375,76 @@ async function doLogout(){
   render();
 }
 function setAuthMode(m){ state.authMode=m; render(); }
+
+/* ---------- Mot de passe oublié ---------- */
+async function doForgot(){
+  const email = document.getElementById('au-email').value.trim();
+  if(!email){ showToast('Saisis ton adresse email'); return; }
+  if(TURNSTILE_SITE_KEY!=='REMPLACE_PAR_TA_CLE_TURNSTILE' && !turnstileToken){ showToast('Merci de valider le contrôle anti-robot'); return; }
+  const captchaToken = turnstileToken; turnstileToken = null;
+  state.busy=true; render();
+  const opts = { redirectTo: 'https://app.optepia.fr/' };
+  if(captchaToken) opts.captchaToken = captchaToken;
+  const { error } = await sb.auth.resetPasswordForEmail(email, opts);
+  state.busy=false;
+  if(error && /captcha/i.test(error.message)){ showToast(translateAuthError(error.message)); render(); return; }
+  if(error && /rate limit|too many|seconds/i.test(error.message)){ showToast('Trop de demandes — réessaie dans quelques minutes'); render(); return; }
+  /* réponse volontairement identique que le compte existe ou non */
+  state.authMode='forgotSent'; render();
+}
+async function startPasswordReset(){
+  try{ history.replaceState(null,'',location.pathname); }catch(e){}
+  let needsMfa = false, factorId = null;
+  try{
+    const { data: aal } = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
+    if(aal && aal.currentLevel==='aal1' && aal.nextLevel==='aal2'){
+      const { data: f } = await sb.auth.mfa.listFactors();
+      const factor = f && f.totp && f.totp.find(x=>x.status==='verified');
+      if(factor){ needsMfa = true; factorId = factor.id; }
+    }
+  }catch(e){}
+  state.resetNeedsMfa = needsMfa; state.resetFactorId = factorId;
+  state.view='resetPassword'; render();
+}
+async function submitPasswordReset(){
+  const pw = document.getElementById('rp-new').value;
+  const pw2 = document.getElementById('rp-confirm').value;
+  if(!isStrongPw(pw)){ showToast('Le mot de passe ne respecte pas toutes les conditions'); return; }
+  if(pw!==pw2){ showToast('Les mots de passe ne correspondent pas'); return; }
+  const btn = document.getElementById('rp-btn'); if(btn) btn.disabled = true;
+  if(state.resetNeedsMfa){
+    const code = (document.getElementById('rp-mfa').value||'').trim();
+    if(!code){ showToast('Saisis le code à 6 chiffres'); if(btn) btn.disabled=false; return; }
+    const { error: mErr } = await sb.auth.mfa.challengeAndVerify({ factorId: state.resetFactorId, code });
+    if(mErr){ showToast('Code de vérification invalide'); if(btn) btn.disabled=false; return; }
+  }
+  const { error } = await sb.auth.updateUser({ password: pw });
+  if(error){
+    showToast(/same.*password|different/i.test(error.message) ? "Choisis un mot de passe différent de l'ancien" : translateAuthError(error.message));
+    if(btn) btn.disabled=false; return;
+  }
+  state.resetNeedsMfa=false; state.resetFactorId=null;
+  await sb.auth.signOut();
+  state.view='auth'; state.authMode='login'; render();
+  showToast('Mot de passe modifié — connecte-toi avec le nouveau');
+}
+function renderResetPassword(){
+  return `
+  <div style="padding:56px 24px 24px;max-width:420px;margin:0 auto;">
+    <h1 style="font-size:26px;">Nouveau mot de passe</h1>
+    <p class="muted" style="margin-bottom:22px;">Choisis un nouveau mot de passe pour ton compte OPTEPIA.</p>
+    <div class="field"><label>Nouveau mot de passe</label>
+      <div style="display:flex;gap:8px;"><input id="rp-new" type="password" style="flex:1;" autocomplete="new-password" oninput="updatePwRules('rp-new')"><button type="button" class="btn btn-ghost" style="width:auto;" onclick="togglePwVisibility('rp-new',this)">👁</button></div>
+      ${pwChecklistHtml('rp-new')}
+    </div>
+    <div class="field"><label>Confirmer le mot de passe</label>
+      <div style="display:flex;gap:8px;"><input id="rp-confirm" type="password" style="flex:1;" autocomplete="new-password"><button type="button" class="btn btn-ghost" style="width:auto;" onclick="togglePwVisibility('rp-confirm',this)">👁</button></div>
+    </div>
+    ${state.resetNeedsMfa?`<div class="field"><label>Code de ton application d'authentification</label><input id="rp-mfa" inputmode="numeric" maxlength="6" placeholder="123456" style="text-align:center;font-size:20px;letter-spacing:6px;"></div>`:''}
+    <button id="rp-btn" class="btn btn-primary" onclick="submitPasswordReset()">Enregistrer le mot de passe</button>
+    <button class="btn btn-ghost" style="margin-top:10px;" onclick="doLogout()">Annuler</button>
+  </div>`;
+}
 
 /* ---------- Unit setup ---------- */
 function setSetupMode(m){ state.setupMode=m; render(); }
@@ -526,6 +604,8 @@ function render(){
     </div>`;
   } else if(state.view==='auth'){
     html = renderAuth();
+  } else if(state.view==='resetPassword'){
+    html = renderResetPassword();
   } else if(state.view==='mfaChallenge'){
     html = renderMfaChallenge();
   } else if(state.view==='unitSetup'){
@@ -599,6 +679,25 @@ function renderAuth(){
       <button class="btn btn-secondary" onclick="setAuthMode('login')">Retour à la connexion</button>
     </div>`;
   }
+  if(state.authMode==='forgotSent'){
+    return `
+    <div style="padding:70px 24px;max-width:420px;margin:0 auto;text-align:center;">
+      <h1 style="font-size:26px;">Vérifie ta boîte mail</h1>
+      <p class="muted" style="margin:14px 0 22px;">Si un compte existe avec cette adresse, un lien pour choisir un nouveau mot de passe vient d'être envoyé. Pense à regarder dans les courriers indésirables.</p>
+      <button class="btn btn-secondary" onclick="setAuthMode('login')">Retour à la connexion</button>
+    </div>`;
+  }
+  if(state.authMode==='forgot'){
+    return `
+    <div style="padding:56px 24px 24px;max-width:420px;margin:0 auto;">
+      <h1 style="font-size:26px;">Mot de passe oublié</h1>
+      <p class="muted" style="margin-bottom:22px;">Saisis l'adresse email de ton compte : nous t'enverrons un lien pour choisir un nouveau mot de passe.</p>
+      <div class="field"><label>Email</label><input id="au-email" type="email" autocomplete="email"></div>
+      ${TURNSTILE_SITE_KEY!=='REMPLACE_PAR_TA_CLE_TURNSTILE'?`<div class="cf-turnstile" data-theme="dark" style="margin-bottom:14px;"></div>`:''}
+      <button class="btn btn-primary" ${state.busy?'disabled':''} onclick="doForgot()">${state.busy?'<span class="spinner"></span>':'Envoyer le lien'}</button>
+      <button class="btn btn-ghost" style="margin-top:10px;" onclick="setAuthMode('login')">‹ Retour à la connexion</button>
+    </div>`;
+  }
   const isLogin = state.authMode==='login';
   return renderAuthForm(isLogin);
 }
@@ -629,6 +728,7 @@ function renderAuthForm(isLogin){
     ${!isLogin?`<div class="field"><label>Confirmer le mot de passe</label>
       <div style="display:flex;gap:8px;"><input id="au-password2" type="password" style="flex:1;" autocomplete="new-password"><button type="button" class="btn btn-ghost" style="width:auto;" onclick="togglePwVisibility('au-password2',this)">👁</button></div>
     </div>`:''}
+    ${isLogin?`<div style="text-align:right;margin:-4px 0 14px;"><a href="#" onclick="setAuthMode('forgot');return false;" style="color:var(--accent);font-size:13px;text-decoration:none;">Mot de passe oublié ?</a></div>`:''}
     ${TURNSTILE_SITE_KEY!=='REMPLACE_PAR_TA_CLE_TURNSTILE'?`<div class="cf-turnstile" data-theme="dark" style="margin-bottom:14px;"></div>`:''}
     <button class="btn btn-primary" ${state.busy?'disabled':''} onclick="${isLogin?'doLogin()':'doSignUp()'}">${state.busy?'<span class="spinner"></span>':(isLogin?'Se connecter':'Créer mon compte')}</button>
   </div>`;
@@ -2018,7 +2118,7 @@ async function saveLoanReturn(){
 /* ---------- Post-render wiring ---------- */
 function afterRender(){
   if(state.view==='auth' && typeof turnstile==='undefined' && !window.__tsRetry){ window.__tsRetry=setTimeout(function(){ window.__tsRetry=null; if(typeof turnstile!=='undefined') afterRender(); },800); }
-  if(state.view==='auth' && (state.authMode==='signup' || state.authMode==='login') && typeof turnstile!=='undefined'){
+  if(state.view==='auth' && (state.authMode==='signup' || state.authMode==='login' || state.authMode==='forgot') && typeof turnstile!=='undefined'){
     const el = document.querySelector('.cf-turnstile');
     if(el && !el.dataset.rendered){
       el.dataset.rendered='1';
