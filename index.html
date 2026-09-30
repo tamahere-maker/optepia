@@ -43,6 +43,26 @@
   .user-chip .role{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;display:block;}
   .user-chip .name{font-size:13px;font-weight:600;}
   main{padding:16px;padding-bottom:32px;max-width:640px;margin:0 auto;}
+  .sheet{background:#fff;color:#111;border-radius:8px;padding:22px;margin-bottom:24px;font-size:13px;line-height:1.45;}
+  .sheet-t{width:100%;border-collapse:collapse;margin-bottom:4px;}
+  .sheet-t th,.sheet-t td{border:1px solid #c8c8c8;padding:6px 8px;text-align:left;vertical-align:top;}
+  .sheet-t th{background:#f2f2f2;font-weight:600;}
+  @media print{
+    html,body{background:#fff !important;}
+    .topbar,.navbar,.noprint,.toast{display:none !important;}
+    main{padding:0 !important;max-width:none !important;}
+    .sheet{border-radius:0;padding:0;margin:0;}
+  }
+  .acc{background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:10px;overflow:hidden;}
+  .acc>summary{list-style:none;cursor:pointer;padding:15px 16px;display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px;-webkit-tap-highlight-color:transparent;}
+  .acc>summary::-webkit-details-marker{display:none;}
+  .acc>summary::after{content:'›';color:var(--text-muted);font-size:20px;line-height:1;transition:transform .15s;margin-left:10px;}
+  .acc>summary>span:first-child{flex:1;}
+  .acc[open]>summary::after{transform:rotate(90deg);}
+  .acc-body{padding:2px 16px 16px;}
+  .acc-body .card{background:var(--surface2);}
+  .acc-body>.card:last-child{margin-bottom:0;}
+  .acc-body .mfa-title{display:none;}
   .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:12px;}
   .card.tap{cursor:pointer;transition:border-color .15s;}
   .card.tap:active{border-color:var(--accent);}
@@ -175,7 +195,8 @@ let state = {
   detailId:null, search:'', filter:'tous', viewMode:'flat', groupFilter:null, sortMode:'designation',
   mfaFactorId:null, mfaChallengeId:null, mfaFactors:[], mfaEnroll:null,
   loanTab:'pret', checkoutSelection:[], checkoutType:'pret', batchReturn:{}, controlDetailId:null,
-  setupMode:'create', qrStatus:null, toast:null, loadError:null
+  setupMode:'create', qrStatus:null, toast:null, loadError:null,
+  famFilter:'', availFilter:'', jf:{user:'',cat:'',period:'',q:''}, journalLimit:300, journalHasMore:false, bc:null, sheet:null
 };
 const ROLES = {
   administrateur:{label:'Administrateur', can:['creerMateriel','supprimerMateriel','editerMateriel','ajouterControle','gererMembres','exporter','gererPret','validerPret','validerModificationMateriel']},
@@ -201,6 +222,10 @@ function initials(name){ return (name||'?').split(' ').map(w=>w[0]).join('').sli
 function showToast(msg){ state.toast=msg; render(); setTimeout(()=>{ state.toast=null; render(); }, 2400); }
 function fmtDate(d){ if(!d) return '—'; const p=(''+d).slice(0,10).split('-'); if(p.length!==3) return d; return `${p[2]}/${p[1]}/${p[0]}`; }
 function fmtDateTime(d){ if(!d) return '—'; const dt=new Date(d); return dt.toLocaleDateString('fr-FR')+' '+dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}); }
+function equipIds(e){
+  const a=[]; if(e && e.numero_serie) a.push('N°&nbsp;série&nbsp;'+esc(e.numero_serie).replace(/ /g,'&nbsp;')); if(e && e.identification) a.push('Identif.&nbsp;'+esc(e.identification).replace(/ /g,'&nbsp;'));
+  return a.join(' · ');
+}
 function fmtHM(ts){ if(!ts) return ''; const dt=new Date(ts); if(isNaN(dt)) return ''; return dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}); }
 function fmtDT(date, ts){ const h=fmtHM(ts); return fmtDate(date)+(h?' à '+h:''); }
 function daysUntil(d){ if(!d) return null; const t=new Date((''+d).slice(0,10)+'T00:00:00'); const n=new Date(); n.setHours(0,0,0,0); return Math.round((t-n)/86400000); }
@@ -265,7 +290,7 @@ async function loadUnitContext(){
 async function selectMembership(m){
   state.unit = m.units; state.role = m.role; state.myMemberId = m.id; state.myDisplayName = m.display_name; state.activeMembershipId = m.id; state.myAvatarUrl = m.avatar_url || null;
   await refreshAll();
-  state.view='list';
+  state.view='home';
   render();
 }
 function selectMembershipById(id){ const m = state.memberships.find(x=>x.id===id); if(m) selectMembership(m); }
@@ -290,8 +315,9 @@ async function refreshAll(){
   });
 }
 async function loadJournal(){
-  const { data } = await sb.from('audit_log').select('*').eq('unit_id', state.unit.id).order('created_at', {ascending:false}).limit(80);
+  const { data } = await sb.from('audit_log').select('*').eq('unit_id', state.unit.id).order('created_at', {ascending:false}).limit(state.journalLimit);
   state.journal = data || [];
+  state.journalHasMore = state.journal.length >= state.journalLimit;
 }
 // Le journal est écrit côté serveur (triggers Supabase) : le navigateur ne peut plus rien y inscrire.
 // Fonction conservée pour compatibilité, volontairement sans effet.
@@ -636,9 +662,9 @@ function renderNav(){
   const ic = p=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
   return `
   <div class="navbar">
-    <button class="navitem ${v==='list'?'active':''}" onclick="goto('list')">${ic('<rect x="3" y="4" width="18" height="4" rx="1"/><rect x="3" y="10" width="18" height="4" rx="1"/><rect x="3" y="16" width="18" height="4" rx="1"/>')}Matériel</button>
+    <button class="navitem ${v==='home'?'active':''}" onclick="goto('home')">${ic('<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>')}Accueil</button>
+    <button class="navitem ${v==='list'||v==='batchControl'?'active':''}" onclick="goto('list')">${ic('<rect x="3" y="4" width="18" height="4" rx="1"/><rect x="3" y="10" width="18" height="4" rx="1"/><rect x="3" y="16" width="18" height="4" rx="1"/>')}Matériel</button>
     ${can('creerMateriel') ? `<button class="navitem ${v==='addEquip'?'active':''}" onclick="startAddEquip()">${ic('<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>')}Ajouter</button>` : ''}
-    <button class="navitem ${v==='export'?'active':''}" onclick="goto('export')">${ic('<path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/>')}Export</button>
     <button class="navitem ${v==='loans'||v==='checkout'||v==='batchReturn'?'active':''}" onclick="goto('loans')">${ic('<path d="M20 7h-9M14 17H5M17 3l4 4-4 4M7 13l-4 4 4 4"/>')}Prêt</button>
     <button class="navitem ${v==='journal'?'active':''}" onclick="openJournal()">${ic('<path d="M4 19V5a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M9 9h6M9 13h6M9 17h3"/>')}Journal</button>
     <button class="navitem ${v==='profile'?'active':''}" onclick="goto('profile')">${ic('<circle cx="12" cy="8" r="3.5"/><path d="M5 20c1.5-4 5-5.5 7-5.5S17.5 16 19 20"/>')}Profil</button>
@@ -646,6 +672,9 @@ function renderNav(){
 }
 function renderView(){
   switch(state.view){
+    case 'home': return renderHome();
+    case 'loanSheet': return renderLoanSheet();
+    case 'batchControl': return renderBatchControl();
     case 'list': return renderList();
     case 'trash': return renderTrash();
     case 'detail': return renderDetail();
@@ -807,14 +836,28 @@ function renderList(){
   const header = `
   ${totalPending>0?`<div class="card tap" style="border-color:var(--warn);margin-bottom:14px;" onclick="goto('approvals')"><div class="row"><b style="color:var(--warn);">⚠ ${totalPending} validation${totalPending>1?'s':''} en attente</b><span class="muted">›</span></div></div>`:''}
   ${c.attention>0?`<div class="card tap" style="margin-bottom:14px;" onclick="setFilter('attention')"><div class="row"><b style="color:var(--warn);">🔧 ${c.attention} matériel${c.attention>1?'s':''} à contrôler bientôt</b><span class="muted">›</span></div></div>`:''}
-  <div class="search"><input id="search-input" placeholder="Rechercher désignation, marque, n° série…" value="${esc(state.search)}" oninput="onSearchInput(this.value)"></div>
+  <div class="search"><input id="search-input" placeholder="Rechercher désignation, marque, n° série, identification…" value="${esc(state.search)}" oninput="onSearchInput(this.value)"></div>
+  ${(function(){
+    const fams = Array.from(new Set(state.equipment.filter(e=>!e.deleted_at).map(e=>e.famille||'Sans famille'))).sort();
+    const sel = 'flex:1;min-width:0;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 8px;font-size:13px;';
+    return `<div style="display:flex;gap:8px;margin-bottom:10px;">
+      ${fams.length>1?`<select style="${sel}" onchange="state.famFilter=this.value; state.groupFilter=null; render();"><option value="">Toutes les familles</option>${fams.map(f=>`<option value="${esc(f)}" ${state.famFilter===f?'selected':''}>${esc(f)}</option>`).join('')}</select>`:''}
+      <select style="${sel}" onchange="state.availFilter=this.value; render();">
+        <option value="">Disponibilité : toutes</option>
+        <option value="free" ${state.availFilter==='free'?'selected':''}>Disponible</option>
+        <option value="out" ${state.availFilter==='out'?'selected':''}>Sorti (prêt / mission)</option>
+      </select></div>`;
+  })()}
   <div class="filter-chips">
     <button class="chip ${state.filter==='tous'?'active':''}" onclick="setFilter('tous')">Tous · ${c.tous}</button>
     <button class="chip ${state.filter==='conforme'?'active':''}" onclick="setFilter('conforme')">Conforme · ${c.conforme}</button>
     <button class="chip ${state.filter==='attention'?'active':''}" onclick="setFilter('attention')">À surveiller · ${c.attention}</button>
     <button class="chip ${state.filter==='horsService'?'active':''}" onclick="setFilter('horsService')">Hors service · ${c.horsService}</button>
+    ${({depasse:'Contrôle dépassé',jamais:'Jamais contrôlé',proche:'Contrôle à faire < 30 j',finvie:'Fin de vie < 60 j'})[state.filter]?`<button class="chip active" onclick="setFilter('tous')">✓ ${({depasse:'Contrôle dépassé',jamais:'Jamais contrôlé',proche:'Contrôle à faire < 30 j',finvie:'Fin de vie < 60 j'})[state.filter]} ✕</button>`:''}
     <button class="chip ${state.viewMode==='grouped'?'active':''}" onclick="toggleGroupMode()">${state.viewMode==='grouped'?'✓ ':''}Regrouper par type</button>
     <button class="chip ${state.sortMode==='urgence'?'active':''}" onclick="toggleSortMode()">${state.sortMode==='urgence'?'✓ ':''}Trier par urgence</button>
+    ${can('ajouterControle')?`<button class="chip" onclick="startBatchControl()">✔ Contrôle groupé</button>`:''}
+    <button class="chip" onclick="goto('export')">📤 Export</button>
     ${can('creerMateriel')?`<button class="chip" onclick="goto('trash')">🗑 Corbeille${trashCount>0?' · '+trashCount:''}</button>`:''}
   </div>
   <div id="equip-results">${renderListResults()}</div>`;
@@ -831,9 +874,18 @@ function renderListResults(){
   let items = state.equipment.filter(e=>{
     if(e.deleted_at) return false;
     if(q && !(`${e.designation} ${e.marque} ${e.numero_serie} ${e.identification}`.toLowerCase().includes(q))) return false;
+    if(state.famFilter && (e.famille||'Sans famille')!==state.famFilter) return false;
+    const busy = (e.loans||[]).some(l=>l.status==='en_cours'||l.status==='en_attente');
+    if(state.availFilter==='out' && !busy) return false;
+    if(state.availFilter==='free' && busy) return false;
+    const lbl = statusOf(e).label, dfv = daysUntil(e.date_fin_vie);
     if(state.filter==='conforme') return statusOf(e).cls==='badge-ok';
     if(state.filter==='attention') return statusOf(e).cls==='badge-warn';
     if(state.filter==='horsService') return statusOf(e).cls==='badge-danger';
+    if(state.filter==='depasse') return lbl==='Contrôle dépassé';
+    if(state.filter==='jamais') return lbl==='Jamais contrôlé';
+    if(state.filter==='proche') return lbl==='Contrôle proche';
+    if(state.filter==='finvie') return lbl!=='Hors service' && dfv!==null && dfv>=0 && dfv<60;
     return true;
   }).slice().sort((a,b)=>{
     if(state.sortMode==='urgence'){
@@ -861,6 +913,7 @@ function renderListResults(){
             <div>
               <div style="font-weight:600;font-size:15px;">${esc(first.designation)||'Sans désignation'}</div>
               <div class="muted">${esc(first.marque)||'—'}${first.famille?' · '+esc(first.famille):''}${first.sous_famille?' · '+esc(first.sous_famille):''}</div>
+              ${(function(){ const n=g.filter(x=>(x.loans||[]).some(l=>l.status==='en_cours'||l.status==='en_attente')).length; return n?`<div style="font-size:12px;color:var(--warn);">${n} sorti${n>1?'s':''}</div>`:''; })()}
             </div>
           </div>
           <div style="text-align:right;">
@@ -890,7 +943,8 @@ function renderEquipRow(e){
         <div>
           <div style="font-weight:600;font-size:15px;">${esc(e.designation)||'Sans désignation'}</div>
           <div class="muted">${esc(e.marque)||'—'}</div>
-          <div class="mono muted" style="margin-top:2px;">${esc(e.numero_serie)||'—'}</div>
+          <div class="mono muted" style="margin-top:2px;">${equipIds(e)||'—'}</div>
+          ${(function(){ const cur=(e.loans||[]).find(l=>l.status==='en_cours')||(e.loans||[]).find(l=>l.status==='en_attente'); return cur?`<div style="font-size:12px;margin-top:3px;color:var(--warn);">${cur.type==='mission'?'🎯 Mission : ':'📤 Prêté à '}${esc(cur.borrower_name)}${cur.status==='en_attente'?' (à valider)':''}</div>`:''; })()}
         </div>
       </div>
       <div style="text-align:right;">
@@ -984,7 +1038,7 @@ function renderControlDetailView(){
   return `
   <div class="backlink" onclick="state.view='detail'; render();">‹ Retour à la fiche</div>
   <h2>Contrôle du ${fmtDate(c.date)}</h2>
-  <p class="muted" style="margin-bottom:16px;">${esc(e?e.designation:'')} ${e&&e.numero_serie?'· <span class="mono">'+esc(e.numero_serie)+'</span>':''}</p>
+  <p class="muted" style="margin-bottom:16px;">${esc(e?e.designation:'')} ${e&&(e.numero_serie||e.identification)?'· <span class="mono">'+equipIds(e)+'</span>':''}</p>
   <div class="card">
     <div class="row" style="margin-bottom:12px;"><h3 style="color:var(--text);">Statut</h3>${b}</div>
     <div class="field"><label>Vérificateur</label><p>${esc(c.verificateur_name)}</p></div>
@@ -1044,7 +1098,7 @@ function renderAddControl(){
   return `
   <div class="backlink" onclick="cancelAddControl()">‹ Annuler</div>
   <h2>Contrôle annuel</h2>
-  <p class="muted" style="margin-bottom:16px;">${esc(e?e.designation:'')} ${e&&e.numero_serie?'· <span class="mono">'+esc(e.numero_serie)+'</span>':''}</p>
+  <p class="muted" style="margin-bottom:16px;">${esc(e?e.designation:'')} ${e&&(e.numero_serie||e.identification)?'· <span class="mono">'+equipIds(e)+'</span>':''}</p>
   <div class="card">
     <div class="field"><label>Date du contrôle</label><input id="c-date" type="date" value="${controlDraft.date}" oninput="controlDraft.date=this.value"></div>
     <div class="field"><label>Nom du vérificateur</label><input id="c-verificateur" value="${esc(controlDraft.verificateur)}" oninput="controlDraft.verificateur=this.value"></div>
@@ -1108,58 +1162,42 @@ function renderApprovals(){
 }
 
 /* ---- Profil ---- */
+function acc(id, title, body, forceOpen){
+  state.profOpen = state.profOpen || {};
+  const open = forceOpen || !!state.profOpen[id];
+  return `<details class="acc" ${open?'open':''} ontoggle="state.profOpen['${id}']=this.open"><summary>${title}</summary><div class="acc-body">${body}</div></details>`;
+}
 function renderProfile(){
+  const mfaOn = (state.mfaFactors||[]).some(f=>f.status==='verified');
+  const isOwner = state.unit.owner_id===state.session.user.id;
+  const unitBody = (isOwner ? `
+    <div style="margin-bottom:16px;">
+      <h3 style="margin-bottom:8px;">Nom de l'unité</h3>
+      <div class="field" style="margin-bottom:8px;"><input id="unit-name-input" value="${esc(state.unit.name)}"></div>
+      <button class="btn btn-ghost" style="width:auto;" ${state.busy?'disabled':''} onclick="renameUnit()">Enregistrer le nom</button>
+    </div>` : '') + (can('gererMembres') ? `
+    <div style="margin-bottom:16px;">
+      <h3 style="margin-bottom:8px;">Photo de l'équipe</h3>
+      <div class="row" style="justify-content:flex-start;gap:12px;">
+        ${state.unit.avatar_url?`<img src="${imgSrc(state.unit.avatar_url)}" onerror="imgFallback(this)" style="width:56px;height:56px;border-radius:10px;object-fit:cover;">`:''}
+        <button class="btn btn-ghost" style="width:auto;" onclick="pickTeamPhoto()">${state.unit.avatar_url?'Changer':'Ajouter'} la photo</button>
+      </div>
+    </div>
+    <div>
+      <h3 style="margin-bottom:8px;">Code d'invitation</h3>
+      <div class="code-display">${esc(state.unit.join_code||'—')}</div>
+      <p class="muted">Partage ce code : chaque nouvelle personne s'inscrit, puis rejoint l'unité avec ce code (rôle « Lecteur » par défaut, à ajuster dans « Équipe »).</p>
+    </div>` : '');
   return `
   <h2>Profil</h2>
-  <a href="manuel-utilisation.pdf?v=3" target="_blank" rel="noopener" class="card tap" style="display:block;text-decoration:none;color:inherit;margin-bottom:14px;">
-    <div class="row"><b>📖 Aide — Manuel d'utilisation</b><span class="muted">›</span></div>
-  </a>
-  <div class="card tap" style="margin-bottom:14px;" onclick="toggleTheme()">
-    <div class="row"><b>${document.documentElement.getAttribute('data-theme')==='light'?'🌙 Passer au thème sombre':'☀️ Passer au thème clair'}</b><span class="muted">›</span></div>
-  </div>
   <div class="card" style="text-align:center;">
     ${state.myAvatarUrl?`<img src="${imgSrc(state.myAvatarUrl)}" onerror="imgFallback(this)" style="width:88px;height:88px;border-radius:50%;object-fit:cover;margin-bottom:10px;">`:`<div class="user-dot" style="width:88px;height:88px;font-size:28px;margin:0 auto 10px;">${esc(initials(state.myDisplayName))}</div>`}
     <div style="font-weight:600;font-size:16px;">${esc(state.myDisplayName)}</div>
     <div class="muted" style="font-size:12px;">${esc(ROLES[state.role].label)} · ${esc(state.unit.name)}</div>
     <button class="btn btn-ghost" style="width:auto;margin-top:10px;" onclick="pickAvatarPhoto()">Changer la photo</button>
   </div>
-  <div class="card">
-    <h3 style="margin-bottom:10px;">Mot de passe</h3>
-    <div class="field"><label>Mot de passe actuel</label>
-      <div style="display:flex;gap:8px;"><input id="pw-current" type="password" autocomplete="current-password" style="flex:1;"><button type="button" class="btn btn-ghost" style="width:auto;" onclick="togglePwVisibility('pw-current',this)">👁</button></div>
-    </div>
-    <div class="field"><label>Nouveau mot de passe</label>
-      <div style="display:flex;gap:8px;"><input id="pw-new" type="password" autocomplete="new-password" style="flex:1;" oninput="updatePwRules('pw-new')"><button type="button" class="btn btn-ghost" style="width:auto;" onclick="togglePwVisibility('pw-new',this)">👁</button></div>
-      ${pwChecklistHtml('pw-new')}
-    </div>
-    <div class="field"><label>Confirmer le mot de passe</label>
-      <div style="display:flex;gap:8px;"><input id="pw-confirm" type="password" style="flex:1;"><button type="button" class="btn btn-ghost" style="width:auto;" onclick="togglePwVisibility('pw-confirm',this)">👁</button></div>
-    </div>
-    <button class="btn btn-primary" ${state.busy?'disabled':''} onclick="changePassword()">${state.busy?'<span class="spinner"></span>':'Changer le mot de passe'}</button>
-  </div>
-  ${renderMfaSection()}
-  ${state.unit.owner_id===state.session.user.id ? `
-  <div class="card">
-    <h3 style="margin-bottom:8px;">Nom de l'unité</h3>
-    <div class="field" style="margin-bottom:8px;"><input id="unit-name-input" value="${esc(state.unit.name)}"></div>
-    <button class="btn btn-ghost" style="width:auto;" ${state.busy?'disabled':''} onclick="renameUnit()">Enregistrer le nom</button>
-  </div>` : ''}
-  ${can('gererMembres') ? `
-  <div class="card">
-    <h3 style="margin-bottom:8px;">Photo de l'équipe</h3>
-    <div class="row" style="justify-content:flex-start;gap:12px;">
-      ${state.unit.avatar_url?`<img src="${imgSrc(state.unit.avatar_url)}" onerror="imgFallback(this)" style="width:56px;height:56px;border-radius:10px;object-fit:cover;">`:''}
-      <button class="btn btn-ghost" style="width:auto;" onclick="pickTeamPhoto()">${state.unit.avatar_url?'Changer':'Ajouter'} la photo</button>
-    </div>
-  </div>` : ''}
-  <h3 style="margin:20px 0 10px;">Ton équipe — ${esc(state.unit.name)}</h3>
-  <p class="muted" style="margin-bottom:16px;">${state.members.length} membre(s).</p>
-  ${can('gererMembres') ? `
-  <div class="card">
-    <h3 style="margin-bottom:8px;">Code d'invitation</h3>
-    <div class="code-display">${esc(state.unit.join_code||'—')}</div>
-    <p class="muted">Partage ce code : chaque nouvelle personne s'inscrit, puis rejoint l'unité avec ce code (rôle « Lecteur » par défaut, à ajuster ci-dessous).</p>
-  </div>` : ''}
+
+  ${acc('team', `<span>👥 Équipe — ${state.members.length} membre${state.members.length>1?'s':''}</span>`, `
   ${state.members.map(m=>`
     <div class="card">
       <div class="row">
@@ -1181,21 +1219,42 @@ function renderProfile(){
           ${state.role==='administrateur' ? `<button class="btn btn-ghost" style="width:auto;padding:6px 8px;color:var(--danger);" onclick="removeMember('${m.id}','${esc(m.display_name)}')">✕</button>` : ''}
         </div>`:''}
       </div>
-    </div>`).join('')}
-  <div class="divider"></div>
-  <h3 style="margin-bottom:10px;">Rôles</h3>
-  <div class="card"><b style="font-size:13px;">Administrateur</b><p class="muted" style="font-size:13px;margin-top:4px;">Accès complet : matériel, membres, prêts, validations.</p></div>
-  <div class="card"><b style="font-size:13px;">Vérificateur</b><p class="muted" style="font-size:13px;margin-top:4px;">Comme l'administrateur, sauf modifier/supprimer du matériel directement — passe par une proposition validée par l'administrateur.</p></div>
-  <div class="card"><b style="font-size:13px;">Assistant</b><p class="muted" style="font-size:13px;margin-top:4px;">Peut sortir du matériel en mission librement, et prêter du matériel (le prêt doit être validé par un administrateur ou un vérificateur).</p></div>
-  <div class="card"><b style="font-size:13px;">Lecteur</b><p class="muted" style="font-size:13px;margin-top:4px;">Consultation et export uniquement.</p></div>
-  <div class="divider"></div>
-  ${state.unit.owner_id===state.session.user.id ? `
-  <div class="card" style="border-color:var(--warn);">
+    </div>`).join('')}`)}
+
+  ${unitBody ? acc('unit', "<span>🏢 Paramètres de l'unité</span>", unitBody) : ''}
+
+  ${acc('pw', '<span>🔒 Changer mon mot de passe</span>', `
+    <div class="field"><label>Mot de passe actuel</label>
+      <div style="display:flex;gap:8px;"><input id="pw-current" type="password" autocomplete="current-password" style="flex:1;"><button type="button" class="btn btn-ghost" style="width:auto;" onclick="togglePwVisibility('pw-current',this)">👁</button></div>
+    </div>
+    <div class="field"><label>Nouveau mot de passe</label>
+      <div style="display:flex;gap:8px;"><input id="pw-new" type="password" autocomplete="new-password" style="flex:1;" oninput="updatePwRules('pw-new')"><button type="button" class="btn btn-ghost" style="width:auto;" onclick="togglePwVisibility('pw-new',this)">👁</button></div>
+      ${pwChecklistHtml('pw-new')}
+    </div>
+    <div class="field"><label>Confirmer le mot de passe</label>
+      <div style="display:flex;gap:8px;"><input id="pw-confirm" type="password" style="flex:1;"><button type="button" class="btn btn-ghost" style="width:auto;" onclick="togglePwVisibility('pw-confirm',this)">👁</button></div>
+    </div>
+    <button class="btn btn-primary" ${state.busy?'disabled':''} onclick="changePassword()">${state.busy?'<span class="spinner"></span>':'Changer le mot de passe'}</button>`)}
+
+  ${acc('mfa', `<span>🛡️ Double authentification</span><span class="badge ${mfaOn?'badge-ok':''}" style="margin-left:auto;${mfaOn?'':'background:transparent;color:var(--text-muted);'}">${mfaOn?'Activée':'Désactivée'}</span>`, renderMfaSection(), !!state.mfaEnroll)}
+
+  ${acc('prefs', '<span>⚙️ Affichage et aide</span>', `
+    <button class="btn btn-secondary" style="margin-bottom:10px;" onclick="toggleTheme()">${document.documentElement.getAttribute('data-theme')==='light'?'🌙 Passer au thème sombre':'☀️ Passer au thème clair'}</button>
+    <a href="manuel-utilisation.pdf?v=3" target="_blank" rel="noopener" class="btn btn-secondary" style="display:block;text-align:center;text-decoration:none;">📖 Manuel d'utilisation</a>`)}
+
+  ${acc('roles', '<span>ℹ️ Rôles et droits</span>', `
+    <div class="card"><b style="font-size:13px;">Administrateur</b><p class="muted" style="font-size:13px;margin-top:4px;">Accès complet : matériel, membres, prêts, validations.</p></div>
+    <div class="card"><b style="font-size:13px;">Vérificateur</b><p class="muted" style="font-size:13px;margin-top:4px;">Comme l'administrateur, sauf modifier/supprimer du matériel directement — passe par une proposition validée par l'administrateur.</p></div>
+    <div class="card"><b style="font-size:13px;">Assistant</b><p class="muted" style="font-size:13px;margin-top:4px;">Peut sortir du matériel en mission librement, et prêter du matériel (le prêt doit être validé par un administrateur ou un vérificateur).</p></div>
+    <div class="card" style="margin-bottom:0;"><b style="font-size:13px;">Lecteur</b><p class="muted" style="font-size:13px;margin-top:4px;">Consultation et export uniquement.</p></div>`)}
+
+  ${isOwner ? `
+  <div class="card" style="border-color:var(--warn);margin-top:14px;">
     <b style="font-size:13px;color:var(--warn);">Propriétaire de cette unité</b>
     <p class="muted" style="font-size:13px;margin-top:4px;">Tu ne peux pas quitter cette unité sans transférer la propriété à un autre administrateur au préalable.</p>
     <button class="btn btn-secondary" style="margin-top:10px;" onclick="openTransferOwnership()">Transférer la propriété</button>
   </div>` : `
-  <button class="btn btn-danger" style="margin-top:10px;" onclick="leaveUnit()">Quitter cette unité</button>
+  <button class="btn btn-danger" style="margin-top:14px;" onclick="leaveUnit()">Quitter cette unité</button>
   `}
   <button class="btn btn-secondary" style="margin-top:10px;margin-bottom:20px;" onclick="doLogout()">Se déconnecter</button>
   `;
@@ -1272,7 +1331,7 @@ function renderMfaSection(){
   if(state.mfaEnroll){
     return `
     <div class="card">
-      <h3 style="margin-bottom:10px;">Double authentification</h3>
+      <h3 class="mfa-title" style="margin-bottom:10px;">Double authentification</h3>
       <p class="muted" style="font-size:12px;margin-bottom:10px;">Scanne ce code avec une application comme Google Authenticator ou Authy, puis saisis le code à 6 chiffres généré.</p>
       <div style="background:#fff;padding:12px;border-radius:8px;margin-bottom:10px;max-width:220px;">${state.mfaEnroll.qr_code}</div>
       <p class="mono muted" style="font-size:11px;margin-bottom:10px;word-break:break-all;">Code secret (si le scan ne fonctionne pas) : ${esc(state.mfaEnroll.secret)}</p>
@@ -1285,7 +1344,7 @@ function renderMfaSection(){
   }
   return `
   <div class="card">
-    <h3 style="margin-bottom:6px;">Double authentification</h3>
+    <h3 class="mfa-title" style="margin-bottom:6px;">Double authentification</h3>
     <p class="muted" style="font-size:12px;margin-bottom:10px;">${verified?'Activée sur ce compte — un code sera demandé à chaque connexion.':'Optionnelle : ajoute un code à usage unique en plus du mot de passe à chaque connexion.'}</p>
     ${verified
       ? `<button class="btn btn-danger" ${state.busy?'disabled':''} onclick="disableMfa('${verified.id}')">${state.busy?'<span class="spinner"></span>':'Désactiver'}</button>`
@@ -1387,16 +1446,68 @@ async function removeMember(memberId, name){
 }
 
 /* ---- Journal ---- */
-async function openJournal(){ await loadJournal(); state.view='journal'; render(); }
-function renderJournalView(){
-  return `
-  <h2>Journal des modifications</h2>
-  <p class="muted" style="margin-bottom:16px;">Historique des actions sur l'unité ${esc(state.unit.name)}.</p>
-  ${state.journal.length===0?'<p class="muted">Aucune action enregistrée.</p>':state.journal.map(j=>`
+async function openJournal(){ state.journalLimit=300; state.jf={user:'',cat:'',period:'',q:''}; await loadJournal(); state.view='journal'; render(); }
+function catOfAction(a){
+  a = a||'';
+  if(/mission/i.test(a)) return 'Missions';
+  if(/^Pr[êe]t|restitu/i.test(a)) return 'Prêts';
+  if(/Contrôle/i.test(a)) return 'Contrôles';
+  if(/Rôle|Membre|Propriét|Unité/i.test(a)) return 'Équipe et unité';
+  return 'Matériel';
+}
+const JOURNAL_CATS = ['Matériel','Contrôles','Prêts','Missions','Équipe et unité'];
+function journalFiltered(){
+  const f = state.jf, now = Date.now(), days = f.period ? parseInt(f.period,10) : 0, q = (f.q||'').toLowerCase().trim();
+  return state.journal.filter(j=>
+    (!f.user || j.user_name===f.user) &&
+    (!f.cat || catOfAction(j.action)===f.cat) &&
+    (!days || (now - new Date(j.created_at).getTime()) <= days*86400000) &&
+    (!q || `${j.action} ${j.target_label||''} ${j.user_name||''}`.toLowerCase().includes(q)));
+}
+function journalResultsHtml(){
+  const list = journalFiltered();
+  const filtered = state.jf.user || state.jf.cat || state.jf.period || state.jf.q;
+  return `<p class="muted" style="font-size:12px;margin-bottom:8px;">${list.length} action${list.length>1?'s':''}${filtered?' (filtrées)':''}${state.journalHasMore?' — les plus récentes sont chargées':''}</p>`
+    + (list.length===0?'<p class="muted">Aucune action ne correspond.</p>':list.map(j=>`
     <div class="journal-item">
       <div class="row"><b style="font-size:14px;">${esc(j.action)}</b><span class="muted" style="font-size:11px;">${fmtDateTime(j.created_at)}</span></div>
       <p class="muted" style="font-size:13px;margin-top:2px;">${esc(j.user_name)}${j.target_label?' · '+esc(j.target_label):''}</p>
-    </div>`).join('')}
+    </div>`).join(''))
+    + (state.journalHasMore?`<button class="btn btn-ghost" style="margin-top:10px;" onclick="journalMore()">Charger les actions plus anciennes</button>`:'');
+}
+function refreshJournalResults(){ const el=document.getElementById('journal-results'); if(el) el.innerHTML = journalResultsHtml(); }
+function setJournalFilter(k,v){ state.jf[k]=v; refreshJournalResults(); }
+async function journalMore(){ state.journalLimit += 500; await loadJournal(); render(); }
+function exportJournalCsv(){
+  const list = journalFiltered();
+  const rows = [['Date','Heure','Personne','Action','Détail']].concat(list.map(j=>{ const d=new Date(j.created_at); return [d.toLocaleDateString('fr-FR'), d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}), j.user_name||'', j.action||'', j.target_label||'']; }));
+  const csv = rows.map(r=>r.map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(';')).join(String.fromCharCode(10));
+  const blob = new Blob([String.fromCharCode(0xFEFF)+csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=url; a.download='journal-optepia.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+function renderJournalView(){
+  const users = Array.from(new Set(state.journal.map(j=>j.user_name).filter(Boolean))).sort();
+  const sel = 'flex:1;min-width:0;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 8px;font-size:13px;';
+  return `
+  <h2>Journal des modifications</h2>
+  <p class="muted" style="margin-bottom:14px;">Historique des actions sur l'unité ${esc(state.unit.name)}.</p>
+  <div class="search"><input placeholder="Rechercher (action, matériel, personne)…" value="${esc(state.jf.q)}" oninput="setJournalFilter('q',this.value)"></div>
+  <div style="display:flex;gap:8px;margin-bottom:8px;">
+    <select style="${sel}" onchange="setJournalFilter('user',this.value)"><option value="">Toutes les personnes</option>${users.map(u=>`<option value="${esc(u)}" ${state.jf.user===u?'selected':''}>${esc(u)}</option>`).join('')}</select>
+    <select style="${sel}" onchange="setJournalFilter('cat',this.value)"><option value="">Tous les types</option>${JOURNAL_CATS.map(c=>`<option value="${c}" ${state.jf.cat===c?'selected':''}>${c}</option>`).join('')}</select>
+  </div>
+  <div style="display:flex;gap:8px;margin-bottom:14px;">
+    <select style="${sel}" onchange="setJournalFilter('period',this.value)">
+      <option value="">Toute la période</option>
+      <option value="7" ${state.jf.period==='7'?'selected':''}>7 derniers jours</option>
+      <option value="30" ${state.jf.period==='30'?'selected':''}>30 derniers jours</option>
+      <option value="90" ${state.jf.period==='90'?'selected':''}>90 derniers jours</option>
+    </select>
+    <button class="btn btn-ghost" style="width:auto;flex-shrink:0;" onclick="exportJournalCsv()">📤 CSV</button>
+  </div>
+  <div id="journal-results">${journalResultsHtml()}</div>
   `;
 }
 
@@ -1813,7 +1924,7 @@ function renderLoanBatchCard(items, type, status){
       ${status==='en_attente'?`<span class="badge badge-warn">À valider</span>`:''}
     </div>
     <div style="margin-top:10px;">
-      ${items.map(l=>`<div class="muted" style="font-size:13px;padding:5px 0;border-top:1px solid var(--border);">${esc(l._equip.designation)} <span class="mono">${esc(l._equip.numero_serie||'')}</span></div>`).join('')}
+      ${items.map(l=>`<div class="muted" style="font-size:13px;padding:5px 0;border-top:1px solid var(--border);">${esc(l._equip.designation)} <span class="mono">${equipIds(l._equip)}</span></div>`).join('')}
     </div>
     ${status==='en_cours' && can('gererPret') ? `<button class="btn btn-primary" style="margin-top:12px;" onclick="event.stopPropagation(); startBatchReturn('${key}','${type}')">${type==='pret'?'Marquer restitué':'Marquer rentré'}</button>` : ''}
     ${status==='en_attente' && can('validerPret') ? `<div class="btn-row" style="margin-top:12px;">
@@ -1843,6 +1954,7 @@ function renderBatchDetailView(){
       ${first.checkout_signature_url?`<img src="${imgSrc(first.checkout_signature_url)}" onerror="imgFallback(this)" style="width:100%;max-width:340px;display:block;background:#fff;border-radius:8px;border:1px solid var(--border);padding:10px;">`:'<p class="muted">Aucune signature.</p>'}
     </div>
   </div>
+  ${!isPending?`<button class="btn btn-secondary" style="margin-bottom:16px;" onclick="openLoanSheet('${batchKey}','${type}')">🖨 Fiche imprimable (PDF)</button>`:''}
   ${first.status==='refuse'?`<div class="card" style="border-color:var(--danger);"><div class="field" style="margin:0;"><label>Prêt refusé — motif</label><p>${first.refusal_reason?esc(first.refusal_reason):'<span class="muted">Aucun motif renseigné.</span>'}</p></div></div>`:''}
   ${isPending && can('validerPret') ? `<div class="btn-row" style="margin-bottom:16px;">
     <button class="btn btn-primary" onclick="validateLoanBatch('${batchKey}')">Valider</button>
@@ -1851,7 +1963,7 @@ function renderBatchDetailView(){
   <h3 style="margin-bottom:10px;">Matériel (${items.length})</h3>
   ${items.map(l=>`
     <div class="card tap" onclick="state.detailId='${l._equip.id}'; state.view='detail'; render();">
-      <div class="row"><div><div style="font-weight:600;">${esc(l._equip.designation)}</div><div class="mono muted" style="font-size:12px;">${esc(l._equip.numero_serie||'')}</div></div><span class="muted">›</span></div>
+      <div class="row"><div><div style="font-weight:600;">${esc(l._equip.designation)}</div><div class="mono muted" style="font-size:12px;">${equipIds(l._equip)}</div></div><span class="muted">›</span></div>
     </div>`).join('')}
   ${(first.status==='restitue') ? `
   <h3 style="margin:20px 0 10px;">${type==='pret'?'Restitution':'Retour'}</h3>
@@ -1924,18 +2036,23 @@ function renderCheckout(){
     </div>
   </div>
   <h3 id="co-count-header" style="margin-bottom:10px;">Sélectionner le matériel (${n} sélectionné${n!==1?'s':''})</h3>
+  ${available.length>6?`<div class="field"><input id="co-search" type="search" placeholder="Rechercher (désignation, marque, n° série, identification)…" oninput="filterCheckoutList(this.value)"></div>`:''}
   ${available.length===0?'<p class="muted">Aucun matériel disponible (tout est déjà prêté/sorti).</p>':available.map(e=>`
-    <div class="card tap" onclick="const cb=this.querySelector('input[type=checkbox]'); if(event.target!==cb){ cb.checked=!cb.checked; cb.dispatchEvent(new Event('change')); }">
+    <div class="card tap co-item" data-q="${esc(((e.designation||'')+' '+(e.marque||'')+' '+(e.numero_serie||'')+' '+(e.identification||'')).toLowerCase())}" onclick="const cb=this.querySelector('input[type=checkbox]'); if(event.target!==cb){ cb.checked=!cb.checked; cb.dispatchEvent(new Event('change')); }">
       <div class="row">
         <div class="row" style="gap:12px;">
           <input type="checkbox" ${state.checkoutSelection.includes(e.id)?'checked':''} onchange="onCheckoutCheckboxChange('${e.id}', this.checked)" style="width:20px;height:20px;flex-shrink:0;accent-color:var(--accent);">
           ${e.photo_url?`<img class="thumb" src="${imgSrc(e.photo_url)}">`:`<div class="thumb"></div>`}
-          <div><div style="font-weight:600;font-size:14px;">${esc(e.designation)}</div><div class="mono muted" style="font-size:12px;">${esc(e.numero_serie||'')}</div></div>
+          <div><div style="font-weight:600;font-size:14px;">${esc(e.designation)}${e.marque?' <span class="muted" style="font-weight:400;">· '+esc(e.marque)+'</span>':''}</div><div class="mono muted" style="font-size:12px;">${equipIds(e)||'—'}</div></div>
         </div>
       </div>
     </div>`).join('')}
   <button id="co-submit-btn" class="btn btn-primary" style="margin:16px 0 48px;" ${state.busy?'disabled':''} onclick="saveCheckout()">${state.busy?'<span class="spinner"></span>':'Confirmer ('+n+' article'+(n!==1?'s':'')+')'}</button>
   `;
+}
+function filterCheckoutList(q){
+  q = (q||'').toLowerCase().trim();
+  document.querySelectorAll('.co-item').forEach(el=>{ el.style.display = (!q || (el.dataset.q||'').includes(q)) ? '' : 'none'; });
 }
 function onCheckoutCheckboxChange(id, checked){
   const i = state.checkoutSelection.indexOf(id);
@@ -2033,7 +2150,7 @@ function renderLoanOut(){
   return `
   <div class="backlink" onclick="cancelLoan()">‹ Annuler</div>
   <h2>Prêter ce matériel</h2>
-  <p class="muted" style="margin-bottom:16px;">${esc(e?e.designation:'')} ${e&&e.numero_serie?'· <span class="mono">'+esc(e.numero_serie)+'</span>':''}</p>
+  <p class="muted" style="margin-bottom:16px;">${esc(e?e.designation:'')} ${e&&(e.numero_serie||e.identification)?'· <span class="mono">'+equipIds(e)+'</span>':''}</p>
   <div class="card">
     <div class="field"><label>Nom de l'emprunteur</label><input id="lo-borrower" placeholder="Prénom Nom"></div>
     <div class="field"><label>Date de perception</label><input id="lo-checkout" type="date" value="${loanDraft.checkout_date}"></div>
@@ -2115,6 +2232,224 @@ async function saveLoanReturn(){
   state.busy=false; render();
 }
 
+/* ---------- Accueil (tableau de bord) ---------- */
+function goFilter(f){ state.filter=f; state.famFilter=''; state.availFilter=''; state.search=''; state.groupFilter=null; state.view='list'; render(); }
+function dashData(){
+  const active = state.equipment.filter(e=>!e.deleted_at);
+  const d = {total:active.length, conforme:0, depasse:0, jamais:0, proche:0, finvie:0, hs:0};
+  active.forEach(e=>{
+    const lbl = statusOf(e).label, dfv = daysUntil(e.date_fin_vie);
+    if(lbl==='Hors service') d.hs++;
+    else {
+      if(lbl==='Contrôle dépassé') d.depasse++; else if(lbl==='Jamais contrôlé') d.jamais++; else if(lbl==='Contrôle proche') d.proche++; else if(lbl==='Conforme') d.conforme++;
+      if(dfv!==null && dfv>=0 && dfv<60) d.finvie++;
+    }
+  });
+  const cur = groupLoansByBatch(allLoans().filter(l=>l.status==='en_cours'));
+  d.batches = Object.keys(cur).map(k=>{ const first=cur[k][0]; const late = first.type==='pret' && first.expected_return_date && daysUntil(first.expected_return_date)<0; return {key:k, items:cur[k], first, late:!!late}; });
+  d.pretsRetard = d.batches.filter(b=>b.late).length;
+  d.pretsEnCours = d.batches.filter(b=>b.first.type==='pret').length;
+  d.missions = d.batches.filter(b=>b.first.type==='mission').length;
+  d.pendingLoans = can('validerPret') ? Object.keys(groupLoansByBatch(allLoans().filter(l=>l.status==='en_attente'))).length : 0;
+  d.pendingChanges = can('validerModificationMateriel') ? state.changeRequests.length : 0;
+  return d;
+}
+function renderHome(){
+  const d = dashData();
+  const rows = [
+    {n:d.pendingLoans+d.pendingChanges, ico:'⚠', txt:'Validation(s) en attente', col:'var(--warn)', act:"goto('approvals')"},
+    {n:d.pretsRetard, ico:'⏰', txt:'Prêt(s) en retard', col:'var(--danger)', act:"state.loanTab='pret'; goto('loans')"},
+    {n:d.depasse, ico:'🔴', txt:'Contrôle(s) dépassé(s)', col:'var(--danger)', act:"goFilter('depasse')"},
+    {n:d.hs, ico:'⛔', txt:'Hors service (fin de vie dépassée)', col:'var(--danger)', act:"goFilter('horsService')"},
+    {n:d.jamais, ico:'🆕', txt:'Jamais contrôlé(s)', col:'var(--warn)', act:"goFilter('jamais')"},
+    {n:d.proche, ico:'🔧', txt:'Contrôle(s) à faire sous 30 jours', col:'var(--warn)', act:"goFilter('proche')"},
+    {n:d.finvie, ico:'⏳', txt:'Fin(s) de vie sous 60 jours', col:'var(--warn)', act:"goFilter('finvie')"}
+  ].filter(r=>r.n>0);
+  const cur = d.batches.slice().sort((a,b)=>(b.late-a.late) || (a.first.expected_return_date||'9999').localeCompare(b.first.expected_return_date||'9999')).slice(0,6);
+  const actions = [
+    can('gererPret') ? `<button class="btn btn-secondary" onclick="startCheckout('pret')">📤 Nouveau prêt</button>` : '',
+    can('gererPret') ? `<button class="btn btn-secondary" onclick="startCheckout('mission')">🎯 Nouvelle mission</button>` : '',
+    can('ajouterControle') ? `<button class="btn btn-secondary" onclick="startBatchControl()">✔ Contrôle groupé</button>` : '',
+    can('creerMateriel') ? `<button class="btn btn-secondary" onclick="startAddEquip()">➕ Ajouter du matériel</button>` : '',
+    `<button class="btn btn-secondary" onclick="goto('export')">📥 Export</button>`
+  ].filter(Boolean);
+  const tile = (n,l)=>`<div class="card" style="flex:1;min-width:0;text-align:center;padding:12px 6px;margin:0;"><div style="font-family:var(--font-head);font-size:24px;font-weight:700;">${n}</div><div class="muted" style="font-size:11px;">${l}</div></div>`;
+  return `
+  <h2>Accueil</h2>
+  <p class="muted" style="margin-bottom:14px;">${esc(state.unit.name)} · ${new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}</p>
+  <div style="display:flex;gap:8px;margin-bottom:16px;">${tile(d.total,'Matériel')}${tile(d.conforme,'Conformes')}${tile(d.pretsEnCours,'En prêt')}${tile(d.missions,'En mission')}</div>
+  <h3 style="margin-bottom:10px;">À traiter</h3>
+  ${rows.length===0?`<div class="card" style="border-color:var(--ok);"><b style="color:var(--ok);">✅ Tout est conforme</b><p class="muted" style="font-size:13px;margin-top:4px;">Aucun contrôle, prêt ou validation en attente de ta part.</p></div>`
+    : rows.map(r=>`<div class="card tap" style="margin-bottom:8px;" onclick="${r.act}"><div class="row"><div style="display:flex;align-items:center;gap:10px;"><span style="font-family:var(--font-head);font-size:22px;font-weight:700;color:${r.col};min-width:28px;">${r.n}</span><span style="font-size:14px;">${r.ico} ${r.txt}</span></div><span class="muted">›</span></div></div>`).join('')}
+  <h3 style="margin:20px 0 10px;">En cours</h3>
+  ${cur.length===0?'<p class="muted">Aucun prêt ni mission en cours.</p>':cur.map(b=>`
+    <div class="card tap" style="margin-bottom:8px;" onclick="openBatchDetail('${b.key}','${b.first.type}')">
+      <div class="row" style="align-items:flex-start;">
+        <div>
+          <div style="font-weight:600;">${b.first.type==='mission'?'🎯':'📤'} ${esc(b.first.borrower_name)}</div>
+          <div class="muted" style="font-size:12px;">${b.items.length} article${b.items.length>1?'s':''} · depuis le ${fmtDT(b.first.checkout_date,b.first.checkout_at)}${b.first.expected_return_date?' · retour prévu '+fmtDate(b.first.expected_return_date):''}</div>
+        </div>
+        ${b.late?'<span class="badge badge-danger">En retard</span>':''}
+      </div>
+    </div>`).join('')}
+  ${d.batches.length>cur.length?`<button class="btn btn-ghost" onclick="goto('loans')">Voir tout (${d.batches.length}) ›</button>`:''}
+  <h3 style="margin:20px 0 10px;">Actions rapides</h3>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:24px;">${actions.join('')}</div>
+  `;
+}
+
+/* ---------- Fiche de prêt / sortie imprimable ---------- */
+function openLoanSheet(batchKey,type){ state.sheet={key:batchKey,type}; state.view='loanSheet'; render(); window.scrollTo(0,0); }
+function renderLoanSheet(){
+  const {key,type} = state.sheet||{};
+  const items = allLoans().filter(l=>(l.batch_id||l.id)===key && l.type===type);
+  if(items.length===0) return `<div class="backlink" onclick="goto('loans')">‹ Retour</div><div class="empty">Introuvable.</div>`;
+  const f = items[0], isPret = type==='pret';
+  const statut = f.status==='en_attente'?'En attente de validation':f.status==='en_cours'?'En cours':f.status==='refuse'?'Refusé':(isPret?'Restitué':'Rentré');
+  const sig = (u)=>u?`<img src="${imgSrc(u)}" onerror="imgFallback(this)" style="height:70px;max-width:100%;border:1px solid #bbb;border-radius:4px;background:#fff;">`:'<span style="color:#888;">—</span>';
+  const now = new Date();
+  const row = (k,v)=>`<tr><th style="width:38%;">${k}</th><td>${v}</td></tr>`;
+  return `
+  <div class="noprint">
+    <div class="backlink" onclick="state.view='batchDetail'; render();">‹ Retour</div>
+    <button class="btn btn-primary" style="margin-bottom:14px;" onclick="window.print()">🖨 Imprimer / Enregistrer en PDF</button>
+    <p class="muted" style="font-size:12px;margin-bottom:12px;">Dans la fenêtre d'impression, choisis « Enregistrer au format PDF » pour obtenir un fichier.</p>
+  </div>
+  <div class="sheet">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #E4572E;padding-bottom:8px;margin-bottom:14px;">
+      <div><div style="font-size:20px;font-weight:700;letter-spacing:1px;">OPTEPIA</div><div style="color:#555;">${esc(state.unit.name)}</div></div>
+      <div style="text-align:right;color:#555;font-size:12px;">Édité le ${now.toLocaleDateString('fr-FR')} à ${now.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}<br>par ${esc(state.myDisplayName)}</div>
+    </div>
+    <h1 style="font-size:18px;margin:0 0 12px;">${isPret?'Fiche de prêt de matériel':'Fiche de sortie en mission'}</h1>
+    <table class="sheet-t">
+      ${row(isPret?'Emprunteur':'Mission / responsable', `<b>${esc(f.borrower_name)}</b>`)}
+      ${row(isPret?'Perception':'Sortie', esc(fmtDT(f.checkout_date,f.checkout_at)).replace('&nbsp;',' '))}
+      ${f.expected_return_date?row('Retour prévu', fmtDate(f.expected_return_date)):''}
+      ${row('Enregistré par', esc(f.created_by_name||'—'))}
+      ${row('Statut', statut)}
+      ${f.status==='refuse'?row('Motif du refus', esc(f.refusal_reason||'—')):''}
+    </table>
+    <h3 style="color:#111;font-size:14px;margin:16px 0 6px;">Matériel (${items.length})</h3>
+    <table class="sheet-t">
+      <tr><th style="width:28px;">#</th><th>Désignation</th><th>Marque</th><th>N° de série</th><th>Identification</th></tr>
+      ${items.map((l,i)=>`<tr><td>${i+1}</td><td>${esc(l._equip.designation)}</td><td>${esc(l._equip.marque||'')}</td><td>${esc(l._equip.numero_serie||'')}</td><td>${esc(l._equip.identification||'')}</td></tr>`).join('')}
+    </table>
+    <div style="display:flex;gap:16px;margin-top:18px;">
+      <div style="flex:1;"><div style="font-weight:700;margin-bottom:6px;">Signature à la ${isPret?'perception':'sortie'}</div>${sig(f.checkout_signature_url)}</div>
+      ${f.status==='restitue'?`<div style="flex:1;"><div style="font-weight:700;margin-bottom:6px;">Signature au ${isPret?'retour':'retour de mission'}</div>${sig(f.return_signature_url)}</div>`:''}
+    </div>
+    ${f.status==='restitue'?`
+    <h3 style="color:#111;font-size:14px;margin:18px 0 6px;">${isPret?'Restitution':'Retour de mission'}</h3>
+    <table class="sheet-t">
+      ${row(isPret?'Restitué le':'Rentré le', esc(fmtDT(f.return_date,f.returned_at)))}
+      ${isPret&&f.return_condition?row('État au retour', f.return_condition==='endommage'?'Endommagé':f.return_condition==='reserve'?'Avec réserve':'Bon état'):''}
+      ${f.returned_by_name?row('Restitué par', esc(f.returned_by_name)):''}
+    </table>`:''}
+    <p style="color:#888;font-size:11px;margin-top:22px;">Document généré par Optepia — registre du matériel. Identifiant du dossier : ${esc(String(key).slice(0,8))}</p>
+  </div>`;
+}
+
+/* ---------- Contrôle groupé ---------- */
+function startBatchControl(){
+  state.bc = { sel:{}, date:new Date().toISOString().slice(0,10), verif:state.myDisplayName, obs:'' };
+  state.view='batchControl'; render(); window.scrollTo(0,0);
+}
+function renderBatchControl(){
+  const bc = state.bc;
+  const list = state.equipment.filter(e=>!e.deleted_at && statusOf(e).label!=='Hors service')
+    .slice().sort((a,b)=> (urgencyScore(a)-urgencyScore(b)) || (a.designation||'').localeCompare(b.designation||''));
+  const n = Object.keys(bc.sel).length;
+  return `
+  <div class="backlink" onclick="goto('list')">‹ Annuler</div>
+  <h2>Contrôle groupé</h2>
+  <p class="muted" style="margin-bottom:16px;">Contrôle plusieurs matériels d'un coup, avec une seule signature. Le statut peut être ajusté matériel par matériel.</p>
+  <div class="card">
+    <div class="field"><label>Date du contrôle</label><input id="bc-date" type="date" value="${bc.date}" oninput="state.bc.date=this.value"></div>
+    <div class="field"><label>Nom du vérificateur</label><input id="bc-verif" value="${esc(bc.verif)}" oninput="state.bc.verif=this.value"></div>
+    <div class="field"><label>Observations (communes, optionnelles)</label><textarea id="bc-obs" placeholder="Points relevés…" oninput="state.bc.obs=this.value">${esc(bc.obs)}</textarea></div>
+    <div class="field"><label>Signature du vérificateur</label>
+      <canvas id="sigpad" class="sigpad"></canvas>
+      <button class="btn btn-ghost" style="width:auto;margin-top:6px;" onclick="clearSignature()">Effacer la signature</button>
+    </div>
+  </div>
+  <h3 id="bc-count" style="margin-bottom:10px;">Matériel à contrôler (${n} sélectionné${n!==1?'s':''})</h3>
+  <div class="field"><input id="bc-search" type="search" placeholder="Rechercher (désignation, marque, n° série, identification)…" oninput="bcFilter()"></div>
+  <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+    <button class="chip" id="bc-need" onclick="bcToggleNeed()">Seulement ceux à contrôler</button>
+    <button class="chip" onclick="bcSelectVisible()">Tout sélectionner (visibles)</button>
+    <button class="chip" onclick="bcClear()">Tout désélectionner</button>
+  </div>
+  ${list.length===0?'<p class="muted">Aucun matériel.</p>':list.map(e=>{ const st=statusOf(e); const need = st.cls!=='badge-ok'; return `
+    <div class="card bc-item" data-id="${e.id}" data-need="${need?1:0}" data-q="${esc(((e.designation||'')+' '+(e.marque||'')+' '+(e.numero_serie||'')+' '+(e.identification||'')).toLowerCase())}">
+      <div class="row" style="align-items:flex-start;gap:10px;">
+        <label style="display:flex;gap:10px;align-items:flex-start;flex:1;min-width:0;cursor:pointer;">
+          <input type="checkbox" onchange="bcToggle('${e.id}',this.checked)" style="width:20px;height:20px;flex-shrink:0;margin-top:2px;accent-color:var(--accent);">
+          <div style="min-width:0;">
+            <div style="font-weight:600;font-size:14px;">${esc(e.designation)||'Sans désignation'}${e.marque?' <span class="muted" style="font-weight:400;">· '+esc(e.marque)+'</span>':''}</div>
+            <div class="mono muted" style="font-size:12px;">${equipIds(e)||'—'}</div>
+            <span class="badge ${st.cls}" style="margin-top:4px;">${st.label}</span>
+          </div>
+        </label>
+        <select id="bc-st-${e.id}" onchange="bcStatut('${e.id}',this.value)" style="flex-shrink:0;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px;font-size:12px;">
+          <option value="conforme">Conforme</option><option value="reserve">Avec réserve</option><option value="reforme">Réformé</option>
+        </select>
+      </div>
+    </div>`; }).join('')}
+  <button id="bc-submit" class="btn btn-primary" style="margin:16px 0 48px;" onclick="saveBatchControl()">Enregistrer ${n} contrôle${n!==1?'s':''}</button>
+  `;
+}
+function bcUpdateCount(){
+  const n = Object.keys(state.bc.sel).length;
+  const h = document.getElementById('bc-count'); if(h) h.textContent = `Matériel à contrôler (${n} sélectionné${n!==1?'s':''})`;
+  const b = document.getElementById('bc-submit'); if(b) b.textContent = `Enregistrer ${n} contrôle${n!==1?'s':''}`;
+}
+function bcToggle(id,checked){
+  if(checked){ const sel=document.getElementById('bc-st-'+id); state.bc.sel[id] = sel?sel.value:'conforme'; } else delete state.bc.sel[id];
+  bcUpdateCount();
+}
+function bcStatut(id,v){ if(state.bc.sel[id]!==undefined) state.bc.sel[id]=v; }
+function bcFilter(){
+  const q = ((document.getElementById('bc-search')||{}).value||'').toLowerCase().trim();
+  const need = state.bc.needOnly;
+  document.querySelectorAll('.bc-item').forEach(el=>{
+    const ok = (!q || (el.dataset.q||'').includes(q)) && (!need || el.dataset.need==='1');
+    el.style.display = ok ? '' : 'none';
+  });
+}
+function bcToggleNeed(){
+  state.bc.needOnly = !state.bc.needOnly;
+  const b = document.getElementById('bc-need'); if(b) b.classList.toggle('active', !!state.bc.needOnly);
+  bcFilter();
+}
+function bcSetChecked(el,on){
+  const cb = el.querySelector('input[type=checkbox]'); if(!cb) return;
+  if(cb.checked!==on){ cb.checked=on; bcToggle(el.dataset.id,on); }
+}
+function bcSelectVisible(){ document.querySelectorAll('.bc-item').forEach(el=>{ if(el.style.display!=='none') bcSetChecked(el,true); }); }
+function bcClear(){ document.querySelectorAll('.bc-item').forEach(el=>bcSetChecked(el,false)); }
+async function saveBatchControl(){
+  const bc = state.bc, ids = Object.keys(bc.sel);
+  if(ids.length===0){ showToast('Sélectionne au moins un matériel'); return; }
+  if(!bc.date || !(bc.verif||'').trim()){ showToast('Date et vérificateur obligatoires'); return; }
+  if(sigEmpty){ showToast('La signature du vérificateur est requise'); return; }
+  const btn = document.getElementById('bc-submit'); if(btn){ btn.disabled=true; btn.textContent='Enregistrement…'; }
+  try{
+    const sigUrl = await uploadImage(sigCanvas.toDataURL('image/png'), `${state.unit.id}/controls/${uid()}-sig.png`);
+    const rows = ids.map(id=>({
+      equipment_id:id, unit_id:state.unit.id, date:bc.date,
+      verificateur_id:state.session.user.id, verificateur_name:bc.verif.trim(),
+      statut:bc.sel[id], observations:(bc.obs||'').trim(), photo_url:null, signature_url:sigUrl
+    }));
+    const { error } = await sb.from('controls').insert(rows);
+    if(error) throw error;
+    await refreshAll(); state.bc=null; state.view='list'; render();
+    showToast(`${rows.length} contrôle${rows.length>1?'s':''} enregistré${rows.length>1?'s':''}`);
+  }catch(err){
+    showToast(err.message);
+    const b2 = document.getElementById('bc-submit'); if(b2){ b2.disabled=false; bcUpdateCount(); }
+  }
+}
+
 /* ---------- Post-render wiring ---------- */
 function afterRender(){
   if(state.view==='auth' && typeof turnstile==='undefined' && !window.__tsRetry){ window.__tsRetry=setTimeout(function(){ window.__tsRetry=null; if(typeof turnstile!=='undefined') afterRender(); },800); }
@@ -2128,7 +2463,7 @@ function afterRender(){
         'error-callback': function(code){ turnstileToken = null; showToast('Captcha Cloudflare (widget) : erreur ' + code + ' — vérifie le nom de domaine autorisé dans Turnstile'); return true; } });
     }
   }
-  if(state.view==='addControl' || state.view==='loanOut' || state.view==='loanReturn' || state.view==='checkout' || state.view==='batchReturn'){
+  if(state.view==='batchControl' || state.view==='addControl' || state.view==='loanOut' || state.view==='loanReturn' || state.view==='checkout' || state.view==='batchReturn'){
     sigCanvas = document.getElementById('sigpad');
     if(sigCanvas){
       const ratio = window.devicePixelRatio||1; const rect = sigCanvas.getBoundingClientRect();
