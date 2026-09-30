@@ -28,7 +28,7 @@
   .pw-rules li.ok{color:var(--ok);}
   .pw-rules li.ok .box{background:var(--ok);border-color:var(--ok);color:#fff;}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--font-body);height:100%;}
+  html,body{margin:0;padding:0;max-width:100%;overflow-x:hidden;background:var(--bg);color:var(--text);font-family:var(--font-body);height:100%;}
   body{padding-bottom:calc(120px + env(safe-area-inset-bottom));min-height:100vh;}
   h1,h2,h3{font-family:var(--font-head);font-weight:600;letter-spacing:0.2px;margin:0 0 4px 0;}
   h1{font-size:26px;} h2{font-size:20px;} h3{font-size:16px;color:var(--text-muted);font-weight:600;}
@@ -84,7 +84,7 @@
   .badge-ok{background:rgba(79,157,105,0.18);color:var(--ok);}
   .badge-warn{background:rgba(217,164,65,0.18);color:var(--warn);}
   .badge-danger{background:rgba(193,68,58,0.18);color:var(--danger);}
-  .mono{font-family:var(--font-mono);font-size:13px;letter-spacing:0.3px;}
+  .mono{overflow-wrap:anywhere;font-family:var(--font-mono);font-size:13px;letter-spacing:0.3px;}
   .muted{color:var(--text-muted);font-size:13px;}
   .thumb{width:56px;height:56px;border-radius:8px;object-fit:cover;background:var(--surface2);border:1px solid var(--border);flex-shrink:0;}
   .thumb-lg{width:100%;height:180px;border-radius:10px;object-fit:cover;background:var(--surface2);border:1px solid var(--border);}
@@ -223,7 +223,7 @@ function showToast(msg){ state.toast=msg; render(); setTimeout(()=>{ state.toast
 function fmtDate(d){ if(!d) return '—'; const p=(''+d).slice(0,10).split('-'); if(p.length!==3) return d; return `${p[2]}/${p[1]}/${p[0]}`; }
 function fmtDateTime(d){ if(!d) return '—'; const dt=new Date(d); return dt.toLocaleDateString('fr-FR')+' '+dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}); }
 function equipIds(e){
-  const a=[]; if(e && e.numero_serie) a.push('N°&nbsp;série&nbsp;'+esc(e.numero_serie).replace(/ /g,'&nbsp;')); if(e && e.identification) a.push('Identif.&nbsp;'+esc(e.identification).replace(/ /g,'&nbsp;'));
+  const a=[]; if(e && e.numero_serie) a.push('N° série '+esc(e.numero_serie)); if(e && e.identification) a.push('Identif. '+esc(e.identification));
   return a.join(' · ');
 }
 function fmtHM(ts){ if(!ts) return ''; const dt=new Date(ts); if(isNaN(dt)) return ''; return dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}); }
@@ -938,16 +938,16 @@ function renderEquipRow(e){
   return `
   <div class="card tap" onclick="openDetail('${e.id}')">
     <div class="row">
-      <div class="row" style="gap:12px;">
+      <div class="row" style="gap:12px;flex:1;min-width:0;justify-content:flex-start;">
         ${e.photo_url ? `<img class="thumb" src="${imgSrc(e.photo_url)}">` : `<div class="thumb"></div>`}
-        <div>
+        <div style="min-width:0;flex:1;overflow-wrap:break-word;">
           <div style="font-weight:600;font-size:15px;">${esc(e.designation)||'Sans désignation'}</div>
           <div class="muted">${esc(e.marque)||'—'}</div>
           <div class="mono muted" style="margin-top:2px;">${equipIds(e)||'—'}</div>
           ${(function(){ const cur=(e.loans||[]).find(l=>l.status==='en_cours')||(e.loans||[]).find(l=>l.status==='en_attente'); return cur?`<div style="font-size:12px;margin-top:3px;color:var(--warn);">${cur.type==='mission'?'🎯 Mission : ':'📤 Prêté à '}${esc(cur.borrower_name)}${cur.status==='en_attente'?' (à valider)':''}</div>`:''; })()}
         </div>
       </div>
-      <div style="text-align:right;">
+      <div style="text-align:right;flex-shrink:0;">
         <span class="badge ${s.cls}">${s.label}</span>
         ${onLoan?'<div class="badge badge-warn" style="margin-top:4px;">Prêté</div>':onPending?'<div class="badge badge-warn" style="margin-top:4px;">Réservé</div>':''}
       </div>
