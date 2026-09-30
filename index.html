@@ -285,11 +285,9 @@ async function loadJournal(){
   const { data } = await sb.from('audit_log').select('*').eq('unit_id', state.unit.id).order('created_at', {ascending:false}).limit(80);
   state.journal = data || [];
 }
-async function logAction(action, target_label){
-  try{
-    await sb.from('audit_log').insert({unit_id: state.unit.id, user_id: state.session.user.id, user_name: state.myDisplayName, action, target_label});
-  }catch(e){ /* non-bloquant */ }
-}
+// Le journal est écrit côté serveur (triggers Supabase) : le navigateur ne peut plus rien y inscrire.
+// Fonction conservée pour compatibilité, volontairement sans effet.
+async function logAction(action, target_label){ /* journal tenu par le serveur */ }
 
 /* ---------- Règles de mot de passe ---------- */
 const PW_RULES = [
