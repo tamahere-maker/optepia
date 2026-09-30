@@ -580,6 +580,7 @@ function renderView(){
     case 'batchDetail': return renderBatchDetailView();
     case 'checkout': return renderCheckout();
     case 'batchReturn': return renderBatchReturn();
+    case 'refuseLoan': return renderRefuseLoan();
     case 'profile': return renderProfile();
     case 'transferOwnership': return renderTransferOwnership();
     case 'journal': return renderJournalView();
@@ -1773,17 +1774,38 @@ async function validateLoanBatch(batchKey){
   await refreshAll(); if(state.view==='batchDetail') state.view='loans'; render();
   showToast('Prêt validé');
 }
-async function rejectLoanBatch(batchKey){
-  const motif = prompt('Motif du refus (sera envoyé au demandeur) :');
-  if(motif===null) return;
-  const reason = motif.trim();
+function rejectLoanBatch(batchKey){
+  state.refuseBatch = { batchKey, from: state.view };
+  state.view = 'refuseLoan'; render();
+}
+function renderRefuseLoan(){
+  const items = allLoans().filter(l=>(l.batch_id||l.id)===state.refuseBatch.batchKey && l.status==='en_attente');
+  const first = items[0];
+  return `
+  <div class="backlink" onclick="cancelRefuse()">‹ Annuler</div>
+  <h2>Refuser ce prêt</h2>
+  <p class="muted" style="margin-bottom:16px;">${esc(first?first.borrower_name:'')} — ${items.length} article(s)${first&&first.created_by_name?' · proposé par '+esc(first.created_by_name):''}</p>
+  <div class="card">
+    <div class="field"><label>Motif du refus (envoyé au demandeur)</label>
+      <textarea id="refuse-reason" rows="4" style="width:100%;" placeholder="Ex. Matériel indisponible, autorisation manquante…"></textarea>
+    </div>
+  </div>
+  <button class="btn btn-danger" style="margin-bottom:48px;" ${state.busy?'disabled':''} onclick="confirmRefuse()">${state.busy?'<span class="spinner"></span>':'Confirmer le refus'}</button>
+  `;
+}
+function cancelRefuse(){ const f = state.refuseBatch && state.refuseBatch.from; state.view = (f && f!=='refuseLoan') ? f : 'loans'; render(); }
+async function confirmRefuse(){
+  const reason = (document.getElementById('refuse-reason').value||'').trim();
   if(!reason){ showToast('Le motif du refus est requis'); return; }
+  const batchKey = state.refuseBatch.batchKey;
   const items = allLoans().filter(l=>(l.batch_id||l.id)===batchKey && l.status==='en_attente');
   const ids = items.map(l=>l.id);
+  state.busy=true; render();
   const { error } = await sb.from('loans').update({status:'refuse', refusal_reason:reason}).in('id', ids);
-  if(error){ showToast(error.message); return; }
+  state.busy=false;
+  if(error){ showToast(error.message); render(); return; }
   await logAction('Prêt refusé', `${items[0]?items[0].borrower_name:''} — motif : ${reason}`);
-  await refreshAll(); if(state.view==='batchDetail') state.view='loans'; render();
+  await refreshAll(); state.view='loans'; render();
   showToast('Prêt refusé');
 }
 function startCheckout(type){ state.checkoutType=type; state.checkoutSelection=[]; state.view='checkout'; render(); }
