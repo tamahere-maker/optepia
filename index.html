@@ -38,6 +38,9 @@
   .crop-stage img{position:absolute;max-width:none;pointer-events:none;-webkit-user-drag:none;}
   .crop-mask{position:absolute;inset:0;border-radius:50%;box-shadow:0 0 0 999px rgba(0,0,0,.62);border:2px solid rgba(255,255,255,.85);pointer-events:none;}
   .crop-zoom{width:100%;accent-color:#37D69A;}
+  .crop-mask.rect{border-radius:6px;}
+  .crop-ratios{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;}
+  .crop-ratios .chip.on{background:var(--ok-bg);color:var(--accent);border-color:var(--accent);}
   .logo-wm{display:block;height:auto;}
   :root[data-theme="light"] .logo-wm{filter:brightness(0) saturate(100%);opacity:.9;}
   .pw-rules{margin:8px 0 2px;padding:0;list-style:none;font-size:12px;color:var(--text-muted);}
@@ -129,7 +132,7 @@
   .empty h3{color:var(--text-muted);}
   .backlink{display:flex;align-items:center;gap:6px;color:var(--text-muted);font-size:13px;margin-bottom:14px;font-weight:600;}
   .divider{height:1px;background:var(--border);margin:16px 0;}
-  .photo-picker{display:flex;gap:10px;align-items:center;}
+  .photo-picker{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
   .photo-picker .thumb{cursor:pointer;}
   .control-item{border-left:2px solid var(--accent);padding:2px 0 2px 14px;margin-bottom:16px;}
   .control-item.tap{cursor:pointer;}
@@ -741,6 +744,101 @@ function openCropper(url){
     img.src = url;
   });
 }
+function openCropperRect(url){
+  return new Promise(resolve=>{
+    const img = new Image();
+    img.onerror = ()=>{ showToast('Image illisible'); resolve(null); };
+    img.onload = ()=>{
+      const W = img.naturalWidth, H = img.naturalHeight;
+      const maxW = Math.min(window.innerWidth - 40, 340), maxH = Math.max(220, Math.min(window.innerHeight - 320, 420));
+      const RATIOS = [['1:1','Carré',1],['4:3','4:3',4/3],['3:4','3:4',3/4],['orig','Original',W/H]];
+      let a = 1, Sw = maxW, Sh = maxW, base = 1, z = 1, px = W/2, py = H/2;
+      const ov = document.createElement('div'); ov.className = 'crop-ov';
+      ov.innerHTML = `<div class="crop-box">
+        <h3 style="margin:0;color:#fff;text-align:center;">Recadrer la photo</h3>
+        <p style="margin:0;color:#9aa8b2;font-size:12px;text-align:center;">Choisis le format · glisse pour déplacer · pince ou curseur pour zoomer</p>
+        <div class="crop-ratios">${RATIOS.map(r=>`<button type="button" class="chip" data-r="${r[0]}">${r[1]}</button>`).join('')}</div>
+        <div class="crop-stage"><img alt=""><div class="crop-mask rect"></div></div>
+        <input type="range" class="crop-zoom" min="1" max="4" step="0.01" value="1">
+        <div style="display:flex;gap:10px;width:100%;"><button class="btn btn-secondary" id="cr-no">Annuler</button><button class="btn btn-primary" id="cr-ok">Valider</button></div></div>`;
+      document.body.appendChild(ov);
+      const stage = ov.querySelector('.crop-stage'), im = stage.querySelector('img'), zoom = ov.querySelector('.crop-zoom');
+      im.src = url;
+      function layout(){
+        const s = base * z;
+        px = Math.min(Math.max(px, Sw/2/s), W - Sw/2/s); py = Math.min(Math.max(py, Sh/2/s), H - Sh/2/s);
+        im.style.width = (W*s)+'px'; im.style.height = (H*s)+'px';
+        im.style.left = (Sw/2 - px*s)+'px'; im.style.top = (Sh/2 - py*s)+'px';
+      }
+      function setRatio(key){
+        a = RATIOS.find(r=>r[0]===key)[2];
+        Sw = maxW; Sh = Sw / a;
+        if(Sh > maxH){ Sh = maxH; Sw = Sh * a; }
+        stage.style.width = Sw+'px'; stage.style.height = Sh+'px';
+        base = Math.max(Sw/W, Sh/H); z = 1; zoom.value = 1; px = W/2; py = H/2;
+        ov.querySelectorAll('.crop-ratios .chip').forEach(c=>c.classList.toggle('on', c.dataset.r===key));
+        layout();
+      }
+      ov.querySelectorAll('.crop-ratios .chip').forEach(c=>c.onclick = ()=>setRatio(c.dataset.r));
+      setRatio(W/H > 1.15 ? '4:3' : '1:1');
+      zoom.addEventListener('input', ()=>{ z = parseFloat(zoom.value); layout(); });
+      const pts = new Map(); let lastDist = 0;
+      stage.addEventListener('pointerdown', e=>{ stage.setPointerCapture(e.pointerId); pts.set(e.pointerId,{x:e.clientX,y:e.clientY}); lastDist = 0; });
+      stage.addEventListener('pointermove', e=>{
+        if(!pts.has(e.pointerId)) return;
+        const prev = pts.get(e.pointerId), cur = {x:e.clientX,y:e.clientY};
+        if(pts.size===1){ px -= (cur.x-prev.x)/(base*z); py -= (cur.y-prev.y)/(base*z); }
+        pts.set(e.pointerId, cur);
+        if(pts.size===2){
+          const [p1,p2] = [...pts.values()]; const d = Math.hypot(p1.x-p2.x, p1.y-p2.y);
+          if(lastDist) z = Math.min(4, Math.max(1, z * d/lastDist));
+          lastDist = d; zoom.value = z;
+        }
+        layout();
+      });
+      const up = e=>{ pts.delete(e.pointerId); lastDist = 0; };
+      stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up);
+      stage.addEventListener('wheel', e=>{ e.preventDefault(); z = Math.min(4, Math.max(1, z * (e.deltaY<0?1.08:0.93))); zoom.value = z; layout(); }, {passive:false});
+      const close = v=>{ ov.remove(); resolve(v); };
+      ov.querySelector('#cr-no').onclick = ()=>close(null);
+      ov.querySelector('#cr-ok').onclick = ()=>{
+        const s = base*z, srcW = Sw/s, srcH = Sh/s;
+        const ow = Math.max(1, Math.min(900, Math.round(srcW))), oh = Math.max(1, Math.round(ow * srcH / srcW));
+        const c = document.createElement('canvas'); c.width = ow; c.height = oh;
+        c.getContext('2d').drawImage(img, px - srcW/2, py - srcH/2, srcW, srcH, 0, 0, ow, oh);
+        close(c.toDataURL('image/jpeg', 0.7));
+      };
+    };
+    img.src = url;
+  });
+}
+async function pickPhotoCrop(cb){
+  const f = await chooseImageSource('environment'); if(!f) return;
+  const url = URL.createObjectURL(f);
+  const out = await openCropperRect(url);
+  URL.revokeObjectURL(url);
+  if(out) cb(out);
+}
+async function recropSource(dataUrl, path){
+  if(dataUrl) return { url:dataUrl };
+  const u = imgSrc(path); if(!u) return null;
+  try{
+    const r = await fetch(u); if(!r.ok) throw new Error('http');
+    return { url: URL.createObjectURL(await r.blob()), revoke:true };
+  }catch(e){ showToast('Impossible de recadrer cette photo : reprends-la avec « Changer la photo »'); return null; }
+}
+async function recropEquipPhoto(){
+  syncEquipDraftFromDom();
+  const src = await recropSource(equipDraft.photo, equipDraft.photo_url); if(!src) return;
+  const out = await openCropperRect(src.url); if(src.revoke) URL.revokeObjectURL(src.url);
+  if(out){ equipDraft.photo = out; render(); }
+}
+async function recropControlPhoto(){
+  syncControlDraftFromDom();
+  const src = await recropSource(controlDraft.photo, null); if(!src) return;
+  const out = await openCropperRect(src.url);
+  if(out){ controlDraft.photo = out; render(); }
+}
 async function pickCropPhoto(cb){
   const f = await chooseImageSource(); if(!f) return;
   const url = URL.createObjectURL(f);
@@ -770,7 +868,16 @@ const EQUIP_FIELD_MAP = {
   'f-famille':'famille','f-sousFamille':'sous_famille','f-ficheTechnique':'fiche_technique_url'
 };
 function syncEquipDraftFromDom(){
-  Object.keys(EQUIP_FIELD_MAP).forEach(id=>{ const el=document.getElementById(id); if(el) equipDraft[EQUIP_FIELD_MAP[id]] = el.value; });
+  Object.keys(EQUIP_FIELD_MAP).forEach(id=>{
+    const el=document.getElementById(id); if(!el) return;
+    if(id==='f-ficheTechnique'){
+      /* le champ ne montre que les liens externes : s'il est vide, on garde le PDF déjà téléversé */
+      const v = el.value.trim();
+      if(v || !equipDraft.fiche_technique_url || isExternalLink(equipDraft.fiche_technique_url)) equipDraft.fiche_technique_url = v;
+      return;
+    }
+    equipDraft[EQUIP_FIELD_MAP[id]] = el.value;
+  });
 }
 const CONTROL_FIELD_MAP = {'c-date':'date','c-verificateur':'verificateur','c-statut':'statut','c-observations':'observations'};
 function syncControlDraftFromDom(){
@@ -1164,6 +1271,7 @@ function renderDetail(){
     ${e.fiche_technique_url ? `<a href="${esc(imgSrc(e.fiche_technique_url))}" target="_blank" rel="noopener" class="btn btn-secondary" style="margin-top:10px;text-decoration:none;">📄 Voir la fiche technique</a>` : ''}
     ${(function(){ const cr = state.changeRequests.find(c=>c.equipment_id===e.id); return cr ? `<div class="qr-status info" style="margin-top:10px;">${cr.type==='delete'?'Suppression':'Modification'} proposée par ${esc(cr.proposed_by_name)} — en attente de validation${can('validerModificationMateriel')?' (voir plus bas)':''}.</div>${can('validerModificationMateriel')?`<div class="btn-row"><button class="btn btn-primary" onclick="approveChangeRequest('${cr.id}')">Valider</button><button class="btn btn-danger" onclick="rejectChangeRequest('${cr.id}')">Refuser</button></div>`:''}` : ''; })()}
     ${samePhotoButton(e)}
+    ${ficheShareButton(e)}
     ${can('editerMateriel')||can('supprimerMateriel')||can('creerMateriel')||can('proposerModificationMateriel') ? `<div class="btn-row" style="flex-wrap:wrap;margin-top:10px;">
       ${can('editerMateriel')?`<button class="btn btn-secondary" onclick="editEquip('${e.id}')">Modifier</button>`:can('proposerModificationMateriel')?`<button class="btn btn-secondary" onclick="editEquip('${e.id}')">Proposer une modif.</button>`:''}
       ${can('creerMateriel')?`<button class="btn btn-secondary" onclick="duplicateEquip('${e.id}')">Dupliquer</button>`:''}
@@ -1253,7 +1361,7 @@ function renderAddEquip(){
     <div class="field"><label>Photo de l'article</label>
       <div class="photo-picker">
         ${equipDraft.photo||equipDraft.photo_url?`<img class="thumb" src="${equipDraft.photo||imgSrc(equipDraft.photo_url)}" onclick="pickEquipPhoto()">`:`<div class="thumb" style="display:flex;align-items:center;justify-content:center;cursor:pointer;" onclick="pickEquipPhoto()">📷</div>`}
-        <button class="btn btn-ghost" style="width:auto;" onclick="pickEquipPhoto()">${equipDraft.photo||equipDraft.photo_url?'Changer la photo':'Ajouter une photo'}</button>
+        <button class="btn btn-ghost" style="width:auto;" onclick="pickEquipPhoto()">${equipDraft.photo||equipDraft.photo_url?'Changer la photo':'Ajouter une photo'}</button>${equipDraft.photo||equipDraft.photo_url?`<button class="btn btn-ghost" style="width:auto;" onclick="recropEquipPhoto()">✂ Recadrer</button>`:''}
       </div>
     </div>
     <div id="same-photo"></div>
@@ -1275,6 +1383,7 @@ function renderAddEquip(){
     <div class="field"><label>Date de fabrication</label><input id="f-dateFabrication" type="date" value="${equipDraft.date_fabrication||''}"></div>
     <div class="field"><label>Date de 1ère utilisation</label><input id="f-datePremiereUtilisation" type="date" value="${equipDraft.date_premiere_utilisation||''}"></div>
     <div class="field"><label>Date de fin de vie</label><input id="f-dateFinVie" type="date" value="${equipDraft.date_fin_vie||''}"></div>
+    <div id="same-fiche"></div>
     <div class="field"><label>Fiche technique — lien externe (optionnel)</label>
       <input id="f-ficheTechnique" value="${isExternalLink(equipDraft.fiche_technique_url)?esc(equipDraft.fiche_technique_url):''}" placeholder="https://…">
       ${equipDraft.fiche_technique_url && !isExternalLink(equipDraft.fiche_technique_url) ? '<p class="muted" style="font-size:12px;margin-top:6px;">📄 Un PDF est déjà en place — remplis le lien ci-dessus seulement si tu préfères pointer vers une page externe à la place.</p>' : ''}
@@ -1302,7 +1411,7 @@ function renderAddControl(){
     <div class="field"><label>Photo (optionnelle)</label>
       <div class="photo-picker">
         ${controlDraft.photo?`<img class="thumb" src="${controlDraft.photo}" onclick="pickControlPhoto()">`:`<div class="thumb" style="display:flex;align-items:center;justify-content:center;cursor:pointer;" onclick="pickControlPhoto()">📷</div>`}
-        <button class="btn btn-ghost" style="width:auto;" onclick="pickControlPhoto()">${controlDraft.photo?'Changer':'Ajouter une photo'}</button>
+        <button class="btn btn-ghost" style="width:auto;" onclick="pickControlPhoto()">${controlDraft.photo?'Changer':'Ajouter une photo'}</button>${controlDraft.photo?`<button class="btn btn-ghost" style="width:auto;" onclick="recropControlPhoto()">✂ Recadrer</button>`:''}
       </div>
     </div>
     <div class="field"><label>Signature du vérificateur</label>
@@ -1975,7 +2084,22 @@ const _norm = v=>(v||'').toString().trim().toLowerCase();
 function identicalOf(e){
   return state.equipment.filter(x=>x.id!==e.id && !x.deleted_at && _norm(x.designation)===_norm(e.designation) && _norm(x.marque)===_norm(e.marque));
 }
+function refreshSameFiche(){
+  const box = document.getElementById('same-fiche'); if(!box) return;
+  const d = _norm((document.getElementById('f-designation')||{}).value), m = _norm((document.getElementById('f-marque')||{}).value);
+  const typed = ((document.getElementById('f-ficheTechnique')||{}).value||'').trim();
+  if(!d || typed || equipDraft.fiche_technique_url){ box.innerHTML=''; return; }
+  const c = state.equipment.find(x=>!x.deleted_at && x.fiche_technique_url && x.id!==equipDraft._editId && _norm(x.designation)===d && _norm(x.marque)===m);
+  if(!c){ box.innerHTML=''; return; }
+  box.innerHTML = `<button type="button" class="btn btn-secondary" style="margin:0 0 14px;justify-content:flex-start;text-align:left;" onclick="useSameFiche('${c.id}')"><span style="font-size:13px;">📄 Utiliser la fiche technique d'un article identique<br><span class="muted" style="font-size:11px;">Aucun nouveau fichier : économise de l'espace</span></span></button>`;
+}
+function useSameFiche(id){
+  const c = state.equipment.find(x=>x.id===id); if(!c) return;
+  syncEquipDraftFromDom(); equipDraft.fiche_technique_url = c.fiche_technique_url; render();
+  showToast('Fiche technique reprise d\'un article identique');
+}
 function refreshSamePhoto(){
+  refreshSameFiche();
   const box = document.getElementById('same-photo'); if(!box) return;
   const d = _norm((document.getElementById('f-designation')||{}).value), m = _norm((document.getElementById('f-marque')||{}).value);
   if(!d || equipDraft.photo || equipDraft.photo_url){ box.innerHTML=''; return; }
@@ -1994,29 +2118,38 @@ function samePhotoButton(e){
   if(!n) return '';
   return `<button class="btn btn-secondary" style="margin-top:10px;" onclick="applyPhotoToIdentical('${e.id}')">📷 Appliquer cette photo aux ${n} article${n>1?'s':''} identique${n>1?'s':''}</button>`;
 }
-async function applyPhotoToIdentical(id){
+function ficheShareButton(e){
+  if(!e.fiche_technique_url || !can('editerMateriel')) return '';
+  const n = identicalOf(e).filter(x=>x.fiche_technique_url!==e.fiche_technique_url).length;
+  if(!n) return '';
+  return `<button class="btn btn-secondary" style="margin-top:10px;" onclick="applyFicheToIdentical('${e.id}')">📄 Appliquer cette fiche technique aux ${n} article${n>1?'s':''} identique${n>1?'s':''}</button>`;
+}
+function applyPhotoToIdentical(id){ return applySharedFile(id, 'photo_url', 'photo', 'Photo appliquée aux articles identiques'); }
+function applyFicheToIdentical(id){ return applySharedFile(id, 'fiche_technique_url', 'fiche technique', 'Fiche technique appliquée aux articles identiques'); }
+async function applySharedFile(id, field, label, logText){
   const e = state.equipment.find(x=>x.id===id); if(!e) return;
-  const targets = identicalOf(e).filter(x=>x.photo_url!==e.photo_url);
+  const targets = identicalOf(e).filter(x=>x[field]!==e[field]);
   if(!targets.length) return;
-  if(!confirm(`Appliquer la photo de « ${e.designation} » à ${targets.length} fiche${targets.length>1?'s':''} identique${targets.length>1?'s':''} (même désignation et même marque) ?\n\nLeur photo actuelle sera remplacée et les anciens fichiers devenus inutiles seront supprimés pour libérer de l'espace.`)) return;
+  const n = targets.length, pl = n>1?'s':'';
+  if(!confirm(`Appliquer la ${label} de « ${e.designation} » à ${n} fiche${pl} identique${pl} (même désignation et même marque) ?\n\nLeur ${label} actuelle sera remplacée et les anciens fichiers devenus inutiles seront supprimés pour libérer de l'espace.`)) return;
   const ids = targets.map(x=>x.id);
-  const old = [...new Set(targets.map(x=>x.photo_url).filter(Boolean))];
+  const old = [...new Set(targets.map(x=>x[field]).filter(Boolean))];
   state.busy=true; render();
   try{
-    const { error } = await sb.from('equipment').update({ photo_url:e.photo_url, updated_by:state.session.user.id, updated_by_name:state.myDisplayName, updated_at:new Date().toISOString() }).in('id', ids);
+    const { error } = await sb.from('equipment').update({ [field]:e[field], updated_by:state.session.user.id, updated_by_name:state.myDisplayName, updated_at:new Date().toISOString() }).in('id', ids);
     if(error) throw error;
     /* supprime uniquement les fichiers que plus aucune fiche n'utilise */
-    const stillUsed = new Set(state.equipment.filter(x=>!ids.includes(x.id)).map(x=>x.photo_url));
+    const stillUsed = new Set(state.equipment.filter(x=>!ids.includes(x.id)).flatMap(x=>[x.photo_url, x.fiche_technique_url]));
     const removable = old.filter(pth=>!stillUsed.has(pth) && !isExternalLink(pth)).map(pth=>storagePathOf(pth)||pth);
     let removed = 0;
     if(removable.length){ const r = await sb.storage.from(BUCKET).remove(removable); if(!r.error) removed = removable.length; }
-    await logAction('Photo appliquée aux articles identiques', e.designation);
+    await logAction(logText, e.designation);
     await refreshAll();
-    showToast(`Photo appliquée à ${ids.length} fiche${ids.length>1?'s':''}${removed?` · ${removed} fichier${removed>1?'s':''} supprimé${removed>1?'s':''}`:''}`);
+    showToast(`${label[0].toUpperCase()+label.slice(1)} appliquée à ${n} fiche${pl}${removed?` · ${removed} fichier${removed>1?'s':''} supprimé${removed>1?'s':''}`:''}`);
   }catch(err){ showToast(err.message); }
   state.busy=false; render();
 }
-function pickEquipPhoto(){ syncEquipDraftFromDom(); pickPhoto(async (raw)=>{ equipDraft.photo = await resizeDataUrl(raw, 900, 0.65); render(); }); }
+function pickEquipPhoto(){ syncEquipDraftFromDom(); pickPhotoCrop(out=>{ equipDraft.photo = out; render(); }); }
 async function scanQr(){
   syncEquipDraftFromDom();
   showToast('Ouverture de la caméra…');
@@ -2089,7 +2222,7 @@ async function saveEquip(){
 }
 function startAddControl(equipId){ newControlDraft(); controlDraft._equipId=equipId; state.view='addControl'; render(); }
 function cancelAddControl(){ state.detailId = controlDraft._equipId; state.view='detail'; render(); }
-function pickControlPhoto(){ syncControlDraftFromDom(); pickPhoto(async (raw)=>{ controlDraft.photo = await resizeDataUrl(raw, 900, 0.65); render(); }); }
+function pickControlPhoto(){ syncControlDraftFromDom(); pickPhotoCrop(out=>{ controlDraft.photo = out; render(); }); }
 function clearSignature(){ if(!sigCtx) return; sigCtx.clearRect(0,0,sigCanvas.width,sigCanvas.height); sigEmpty=true; }
 async function saveControl(){
   const date = document.getElementById('c-date').value;
