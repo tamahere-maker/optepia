@@ -109,6 +109,12 @@
   .muted{color:var(--text-muted);font-size:13px;}
   .thumb{width:56px;height:56px;border-radius:8px;object-fit:cover;background:var(--surface2);border:1px solid var(--border);flex-shrink:0;}
   .thumb-lg{width:100%;height:180px;border-radius:10px;object-fit:cover;background:var(--surface2);border:1px solid var(--border);}
+  .thumb-full{width:100%;height:auto;max-height:380px;object-fit:contain;background:var(--surface2);border-radius:10px;border:1px solid var(--border);display:block;cursor:zoom-in;}
+  .thumb-hist{height:76px;width:auto;max-width:130px;object-fit:contain;background:var(--surface2);border-radius:8px;border:1px solid var(--border);flex-shrink:0;cursor:zoom-in;}
+  .lb-ov{position:fixed;inset:0;z-index:300;background:rgba(3,5,7,.96);display:flex;align-items:center;justify-content:center;touch-action:none;overflow:hidden;}
+  .lb-ov img{max-width:100%;max-height:100%;object-fit:contain;transform-origin:center center;user-select:none;-webkit-user-select:none;-webkit-user-drag:none;will-change:transform;}
+  .lb-x{position:absolute;top:calc(14px + env(safe-area-inset-top));right:14px;width:42px;height:42px;border-radius:50%;background:rgba(255,255,255,.14);color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center;z-index:2;}
+  .lb-hint{position:absolute;bottom:calc(18px + env(safe-area-inset-bottom));left:0;right:0;text-align:center;color:#9aa8b2;font-size:12px;pointer-events:none;}
   .thumb-contain{width:100%;max-height:420px;height:auto;object-fit:contain;background:var(--surface2);border-radius:10px;border:1px solid var(--border);display:block;}
   .search{display:flex;gap:8px;margin-bottom:14px;}
   .search input{flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px 12px;font-size:14px;}
@@ -744,6 +750,40 @@ function openCropper(url){
     img.src = url;
   });
 }
+/* ---- Visionneuse plein écran : pincer / molette pour zoomer, double appui, glisser ---- */
+function openLightbox(src){
+  if(!src) return;
+  const ov = document.createElement('div'); ov.className='lb-ov';
+  ov.innerHTML = `<button class="lb-x" aria-label="Fermer">✕</button><img alt=""><div class="lb-hint">Pince ou double appui pour zoomer</div>`;
+  document.body.appendChild(ov);
+  const im = ov.querySelector('img'); im.src = src;
+  let sc=1, tx=0, ty=0, moved=false, lastTap=0; const pts=new Map(); let lastDist=0;
+  const apply=()=>{ if(sc<=1){ sc=1; tx=0; ty=0; } im.style.transform=`translate(${tx}px,${ty}px) scale(${sc})`; };
+  const close=()=>{ ov.remove(); document.removeEventListener('keydown',onKey); };
+  const onKey=e=>{ if(e.key==='Escape') close(); };
+  document.addEventListener('keydown',onKey);
+  ov.querySelector('.lb-x').onclick = e=>{ e.stopPropagation(); close(); };
+  ov.addEventListener('pointerdown',e=>{ if(e.target.closest('.lb-x')) return; ov.setPointerCapture(e.pointerId); pts.set(e.pointerId,{x:e.clientX,y:e.clientY}); lastDist=0; moved=false; });
+  ov.addEventListener('pointermove',e=>{
+    if(!pts.has(e.pointerId)) return;
+    const prev=pts.get(e.pointerId), cur={x:e.clientX,y:e.clientY};
+    if(Math.abs(cur.x-prev.x)+Math.abs(cur.y-prev.y)>2) moved=true;
+    if(pts.size===1 && sc>1){ tx+=cur.x-prev.x; ty+=cur.y-prev.y; }
+    pts.set(e.pointerId,cur);
+    if(pts.size===2){ const [a,b]=[...pts.values()]; const d=Math.hypot(a.x-b.x,a.y-b.y); if(lastDist) sc=Math.min(6,Math.max(1,sc*d/lastDist)); lastDist=d; moved=true; }
+    apply();
+  });
+  const up=e=>{
+    const wasSingle = pts.size===1; pts.delete(e.pointerId); lastDist=0;
+    if(wasSingle && !moved){
+      const now=Date.now();
+      if(now-lastTap<300){ sc = sc>1 ? 1 : 2.5; apply(); lastTap=0; }
+      else { lastTap=now; setTimeout(()=>{ if(lastTap && Date.now()-lastTap>=290 && sc===1 && !pts.size){ lastTap=0; close(); } }, 310); }
+    }
+  };
+  ov.addEventListener('pointerup',up); ov.addEventListener('pointercancel',e=>{ pts.delete(e.pointerId); lastDist=0; });
+  ov.addEventListener('wheel',e=>{ e.preventDefault(); sc=Math.min(6,Math.max(1,sc*(e.deltaY<0?1.15:0.87))); apply(); },{passive:false});
+}
 function openCropperRect(url){
   return new Promise(resolve=>{
     const img = new Image();
@@ -1257,7 +1297,7 @@ function renderDetail(){
   return `
   <div class="backlink" onclick="goto('list')">‹ Retour à la liste</div>
   <div class="card">
-    ${e.photo_url ? `<img class="thumb-lg" src="${imgSrc(e.photo_url)}" style="margin-bottom:14px;" onerror="imgFallback(this)">` : ''}
+    ${e.photo_url ? `<img class="thumb-full" src="${imgSrc(e.photo_url)}" style="margin-bottom:14px;" onclick="openLightbox(this.currentSrc||this.src)" onerror="imgFallback(this)">` : ''}
     <div class="row" style="align-items:flex-start;"><h2>${esc(e.designation)||'Sans désignation'}</h2><span class="badge ${s.cls}">${s.label}</span></div>
     <p class="muted" style="margin-bottom:14px;">${esc(e.marque)||'—'}</p>
     ${reformBanner(e)}
@@ -1322,7 +1362,7 @@ function renderControl(c){
     <p class="muted" style="margin:4px 0;">Vérificateur : ${esc(c.verificateur_name)}</p>
     ${c.observations?`<p style="font-size:14px;margin-bottom:8px;">${esc(c.observations)}</p>`:''}
     <div class="row" style="gap:10px;justify-content:flex-start;">
-      ${c.photo_url?`<img class="thumb" src="${imgSrc(c.photo_url)}">`:''}
+      ${c.photo_url?`<img class="thumb-hist" src="${imgSrc(c.photo_url)}" onclick="event.stopPropagation();openLightbox(this.currentSrc||this.src)">`:''}
       ${c.signature_url?`<div><div class="muted" style="font-size:11px;margin-bottom:3px;">Signature</div><img src="${imgSrc(c.signature_url)}" style="height:40px;background:#fff;border-radius:4px;"></div>`:''}
     </div>
   </div>`;
@@ -1341,7 +1381,7 @@ function renderControlDetailView(){
     <div class="row" style="margin-bottom:12px;"><h3 style="color:var(--text);">Statut</h3>${b}</div>
     <div class="field"><label>Vérificateur</label><p>${esc(c.verificateur_name)}</p></div>
     <div class="field"><label>Observations</label><p style="white-space:pre-wrap;">${c.observations?esc(c.observations):'—'}</p></div>
-    ${c.photo_url?`<div class="field"><label>Photo</label><img class="thumb-contain" src="${imgSrc(c.photo_url)}" onerror="imgFallback(this)"></div>`:''}
+    ${c.photo_url?`<div class="field"><label>Photo</label><img class="thumb-contain" style="cursor:zoom-in;" src="${imgSrc(c.photo_url)}" onclick="openLightbox(this.currentSrc||this.src)" onerror="imgFallback(this)"></div>`:''}
     <div class="field"><label>Signature du vérificateur</label>
       ${c.signature_url?`<img src="${imgSrc(c.signature_url)}" onerror="imgFallback(this)" style="width:100%;max-width:340px;display:block;background:#fff;border-radius:8px;border:1px solid var(--border);padding:10px;">`:'<p class="muted">Aucune signature.</p>'}
     </div>
