@@ -657,10 +657,13 @@ document.getElementById('photoInput').addEventListener('change', async (e)=>{
   const raw = await readFile(file);
   photoCallback(raw);
 });
-function pickPhoto(cb){ photoCallback = cb; document.getElementById('photoInput').click(); }
+function pickPhoto(cb){
+  /* galerie / import de fichier OU appareil photo (caméra arrière) */
+  chooseImageSource('environment').then(async f=>{ if(!f) return; cb(await readFile(f)); });
+}
 
 /* ---- Photo de profil / d'équipe : galerie ou appareil photo, puis recadrage rond ---- */
-function chooseImageSource(){
+function chooseImageSource(facing){
   return new Promise(resolve=>{
     const ov = document.createElement('div'); ov.className = 'sheet-ov';
     ov.innerHTML = `<div class="sheet-box">
@@ -672,7 +675,7 @@ function chooseImageSource(){
     const pick = (cam)=>{
       ov.remove();
       const inp = document.createElement('input'); inp.type='file'; inp.accept='image/*';
-      if(cam) inp.setAttribute('capture','user');
+      if(cam) inp.setAttribute('capture', facing||'user');
       inp.style.display='none'; document.body.appendChild(inp);
       inp.addEventListener('change', ()=>{ const f = inp.files && inp.files[0]; inp.remove(); resolve(f||null); });
       inp.click();
@@ -808,6 +811,7 @@ function render(){
   }
   if(state.toast) html += `<div class="toast">${esc(state.toast)}</div>`;
   app.innerHTML = html;
+  if(state.view==='addEquip') refreshSamePhoto();
   afterRender();
 }
 function brandMark(h){ return `<img src="logo-mark.png" alt="" style="height:${h||56}px;width:auto;display:block;margin:0 auto 18px;">`; }
@@ -1159,6 +1163,7 @@ function renderDetail(){
     <p class="muted" style="font-size:11px;">Créé par ${esc(e.created_by_name||'?')} · Modifié par ${esc(e.updated_by_name||e.created_by_name||'?')}</p>
     ${e.fiche_technique_url ? `<a href="${esc(imgSrc(e.fiche_technique_url))}" target="_blank" rel="noopener" class="btn btn-secondary" style="margin-top:10px;text-decoration:none;">📄 Voir la fiche technique</a>` : ''}
     ${(function(){ const cr = state.changeRequests.find(c=>c.equipment_id===e.id); return cr ? `<div class="qr-status info" style="margin-top:10px;">${cr.type==='delete'?'Suppression':'Modification'} proposée par ${esc(cr.proposed_by_name)} — en attente de validation${can('validerModificationMateriel')?' (voir plus bas)':''}.</div>${can('validerModificationMateriel')?`<div class="btn-row"><button class="btn btn-primary" onclick="approveChangeRequest('${cr.id}')">Valider</button><button class="btn btn-danger" onclick="rejectChangeRequest('${cr.id}')">Refuser</button></div>`:''}` : ''; })()}
+    ${samePhotoButton(e)}
     ${can('editerMateriel')||can('supprimerMateriel')||can('creerMateriel')||can('proposerModificationMateriel') ? `<div class="btn-row" style="flex-wrap:wrap;margin-top:10px;">
       ${can('editerMateriel')?`<button class="btn btn-secondary" onclick="editEquip('${e.id}')">Modifier</button>`:can('proposerModificationMateriel')?`<button class="btn btn-secondary" onclick="editEquip('${e.id}')">Proposer une modif.</button>`:''}
       ${can('creerMateriel')?`<button class="btn btn-secondary" onclick="duplicateEquip('${e.id}')">Dupliquer</button>`:''}
@@ -1248,11 +1253,12 @@ function renderAddEquip(){
     <div class="field"><label>Photo de l'article</label>
       <div class="photo-picker">
         ${equipDraft.photo||equipDraft.photo_url?`<img class="thumb" src="${equipDraft.photo||imgSrc(equipDraft.photo_url)}" onclick="pickEquipPhoto()">`:`<div class="thumb" style="display:flex;align-items:center;justify-content:center;cursor:pointer;" onclick="pickEquipPhoto()">📷</div>`}
-        <button class="btn btn-ghost" style="width:auto;" onclick="pickEquipPhoto()">${equipDraft.photo||equipDraft.photo_url?'Changer la photo':'Prendre une photo'}</button>
+        <button class="btn btn-ghost" style="width:auto;" onclick="pickEquipPhoto()">${equipDraft.photo||equipDraft.photo_url?'Changer la photo':'Ajouter une photo'}</button>
       </div>
     </div>
-    <div class="field"><label>Désignation</label><input id="f-designation" value="${esc(equipDraft.designation)}" placeholder="Ex. Baudrier, corde, mousqueton…"></div>
-    <div class="field"><label>Marque</label><input id="f-marque" value="${esc(equipDraft.marque)}"></div>
+    <div id="same-photo"></div>
+    <div class="field"><label>Désignation</label><input id="f-designation" value="${esc(equipDraft.designation)}" oninput="refreshSamePhoto()" placeholder="Ex. Baudrier, corde, mousqueton…"></div>
+    <div class="field"><label>Marque</label><input id="f-marque" value="${esc(equipDraft.marque)}" oninput="refreshSamePhoto()"></div>
     <div class="row" style="gap:10px;align-items:flex-start;">
       <div class="field" style="flex:1;"><label>Famille</label><input id="f-famille" list="famille-list" value="${esc(equipDraft.famille)}" placeholder="Métallique, Textile…"></div>
       <div class="field" style="flex:1;"><label>Sous-famille</label><input id="f-sousFamille" list="sousfamille-list" value="${esc(equipDraft.sous_famille)}" placeholder="Mousqueton…"></div>
@@ -1963,6 +1969,52 @@ async function rejectChangeRequest(id){
   await logAction('Modification refusée', cr?(cr.proposed_data?cr.proposed_data.designation:''):'');
   await refreshAll(); render();
   showToast('Refusé');
+}
+/* ---- Photos partagées entre articles identiques (économie d'espace) ---- */
+const _norm = v=>(v||'').toString().trim().toLowerCase();
+function identicalOf(e){
+  return state.equipment.filter(x=>x.id!==e.id && !x.deleted_at && _norm(x.designation)===_norm(e.designation) && _norm(x.marque)===_norm(e.marque));
+}
+function refreshSamePhoto(){
+  const box = document.getElementById('same-photo'); if(!box) return;
+  const d = _norm((document.getElementById('f-designation')||{}).value), m = _norm((document.getElementById('f-marque')||{}).value);
+  if(!d || equipDraft.photo || equipDraft.photo_url){ box.innerHTML=''; return; }
+  const c = state.equipment.find(x=>!x.deleted_at && x.photo_url && x.id!==equipDraft._editId && _norm(x.designation)===d && _norm(x.marque)===m);
+  if(!c){ box.innerHTML=''; return; }
+  box.innerHTML = `<button type="button" class="btn btn-secondary" style="margin:-4px 0 14px;gap:10px;justify-content:flex-start;text-align:left;" onclick="useSamePhoto('${c.id}')"><img class="thumb" style="width:36px;height:36px;" src="${imgSrc(c.photo_url)}"><span style="font-size:13px;">Utiliser la photo d'un article identique<br><span class="muted" style="font-size:11px;">Aucun nouveau fichier : économise de l'espace</span></span></button>`;
+}
+function useSamePhoto(id){
+  const c = state.equipment.find(x=>x.id===id); if(!c) return;
+  syncEquipDraftFromDom(); equipDraft.photo = null; equipDraft.photo_url = c.photo_url; render();
+  showToast('Photo reprise d\'un article identique');
+}
+function samePhotoButton(e){
+  if(!e.photo_url || !can('editerMateriel')) return '';
+  const n = identicalOf(e).filter(x=>x.photo_url!==e.photo_url).length;
+  if(!n) return '';
+  return `<button class="btn btn-secondary" style="margin-top:10px;" onclick="applyPhotoToIdentical('${e.id}')">📷 Appliquer cette photo aux ${n} article${n>1?'s':''} identique${n>1?'s':''}</button>`;
+}
+async function applyPhotoToIdentical(id){
+  const e = state.equipment.find(x=>x.id===id); if(!e) return;
+  const targets = identicalOf(e).filter(x=>x.photo_url!==e.photo_url);
+  if(!targets.length) return;
+  if(!confirm(`Appliquer la photo de « ${e.designation} » à ${targets.length} fiche${targets.length>1?'s':''} identique${targets.length>1?'s':''} (même désignation et même marque) ?\n\nLeur photo actuelle sera remplacée et les anciens fichiers devenus inutiles seront supprimés pour libérer de l'espace.`)) return;
+  const ids = targets.map(x=>x.id);
+  const old = [...new Set(targets.map(x=>x.photo_url).filter(Boolean))];
+  state.busy=true; render();
+  try{
+    const { error } = await sb.from('equipment').update({ photo_url:e.photo_url, updated_by:state.session.user.id, updated_by_name:state.myDisplayName, updated_at:new Date().toISOString() }).in('id', ids);
+    if(error) throw error;
+    /* supprime uniquement les fichiers que plus aucune fiche n'utilise */
+    const stillUsed = new Set(state.equipment.filter(x=>!ids.includes(x.id)).map(x=>x.photo_url));
+    const removable = old.filter(pth=>!stillUsed.has(pth) && !isExternalLink(pth)).map(pth=>storagePathOf(pth)||pth);
+    let removed = 0;
+    if(removable.length){ const r = await sb.storage.from(BUCKET).remove(removable); if(!r.error) removed = removable.length; }
+    await logAction('Photo appliquée aux articles identiques', e.designation);
+    await refreshAll();
+    showToast(`Photo appliquée à ${ids.length} fiche${ids.length>1?'s':''}${removed?` · ${removed} fichier${removed>1?'s':''} supprimé${removed>1?'s':''}`:''}`);
+  }catch(err){ showToast(err.message); }
+  state.busy=false; render();
 }
 function pickEquipPhoto(){ syncEquipDraftFromDom(); pickPhoto(async (raw)=>{ equipDraft.photo = await resizeDataUrl(raw, 900, 0.65); render(); }); }
 async function scanQr(){
