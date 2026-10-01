@@ -583,17 +583,36 @@ async function uploadImage(dataUrl, path){
   if(error) throw error;
   return path;
 }
-function isExternalLink(v){ return !!v && /^https?:\/\//.test(v); }
+/* Anciennes données : certaines signatures sont stockées sous forme d'URL publique complète du bucket (devenu privé).
+   On en extrait le chemin pour générer un lien signé. */
+function storagePathOf(v){
+  const m = /\/storage\/v1\/object\/(?:public|sign|authenticated)\/registre-materiel\/([^?#]+)/.exec(v||'');
+  if(!m) return null;
+  try{ return decodeURIComponent(m[1]); }catch(e){ return m[1]; }
+}
+function isExternalLink(v){ return !!v && /^https?:\/\//.test(v) && !storagePathOf(v); }
 let signedUrlCache = {};
 async function resolveSignedUrls(paths){
-  const uniq = [...new Set((paths||[]).filter(p=>p && !isExternalLink(p)))];
+  const byPath = {};   /* chemin réel -> valeurs stockées qui y mènent */
+  (paths||[]).forEach(v=>{
+    if(!v || isExternalLink(v)) return;
+    const real = storagePathOf(v) || v;
+    (byPath[real] = byPath[real] || []).push(v);
+  });
   const now = Date.now();
-  const need = uniq.filter(p=>!signedUrlCache[p] || signedUrlCache[p].expires < now + 5*60*1000);
+  const need = Object.keys(byPath).filter(real=>byPath[real].some(v=>!signedUrlCache[v] || signedUrlCache[v].expires < now + 5*60*1000));
   if(need.length===0) return;
   try{
-    const { data, error } = await sb.storage.from(BUCKET).createSignedUrls(need, 3600);
-    if(error) throw error;
-    (data||[]).forEach(d=>{ if(d.signedUrl) signedUrlCache[d.path] = { url: d.signedUrl, expires: now + 3600*1000 }; });
+    for(let i=0;i<need.length;i+=100){
+      const { data, error } = await sb.storage.from(BUCKET).createSignedUrls(need.slice(i,i+100), 3600);
+      if(error) throw error;
+      (data||[]).forEach(d=>{
+        if(!d.signedUrl) return;
+        const entry = { url: d.signedUrl, expires: now + 3600*1000 };
+        signedUrlCache[d.path] = entry;
+        (byPath[d.path]||[]).forEach(v=>{ signedUrlCache[v] = entry; });
+      });
+    }
   }catch(e){ /* silencieux : imgFallback prendra le relais à l'affichage */ }
 }
 function imgSrc(v){
@@ -735,8 +754,8 @@ document.getElementById('pdfInput').addEventListener('change', async (e)=>{
     const path = `${state.unit.id}/datasheets/${uid()}.pdf`;
     const { error } = await sb.storage.from(BUCKET).upload(path, file, {upsert:true, contentType:'application/pdf'});
     if(error) throw error;
-    const { data } = sb.storage.from(BUCKET).getPublicUrl(path);
-    equipDraft.fiche_technique_url = data.publicUrl;
+    equipDraft.fiche_technique_url = path;   /* chemin privé : le lien signé est généré à l'affichage */
+    resolveSignedUrls([path]);
     render();
     showToast('PDF ajouté à la fiche');
   }catch(err){ showToast(err.message); }
@@ -1138,7 +1157,7 @@ function renderDetail(){
     <div class="row"><div class="field" style="flex:1;"><label>Fabrication</label><p>${fmtDate(e.date_fabrication)}</p></div><div class="field" style="flex:1;"><label>1ère utilisation</label><p>${fmtDate(e.date_premiere_utilisation)}</p></div></div>
     <div class="field"><label>Fin de vie</label><p>${fmtDate(e.date_fin_vie)}</p></div>
     <p class="muted" style="font-size:11px;">Créé par ${esc(e.created_by_name||'?')} · Modifié par ${esc(e.updated_by_name||e.created_by_name||'?')}</p>
-    ${e.fiche_technique_url ? `<a href="${esc(e.fiche_technique_url)}" target="_blank" rel="noopener" class="btn btn-secondary" style="margin-top:10px;text-decoration:none;">📄 Voir la fiche technique</a>` : ''}
+    ${e.fiche_technique_url ? `<a href="${esc(imgSrc(e.fiche_technique_url))}" target="_blank" rel="noopener" class="btn btn-secondary" style="margin-top:10px;text-decoration:none;">📄 Voir la fiche technique</a>` : ''}
     ${(function(){ const cr = state.changeRequests.find(c=>c.equipment_id===e.id); return cr ? `<div class="qr-status info" style="margin-top:10px;">${cr.type==='delete'?'Suppression':'Modification'} proposée par ${esc(cr.proposed_by_name)} — en attente de validation${can('validerModificationMateriel')?' (voir plus bas)':''}.</div>${can('validerModificationMateriel')?`<div class="btn-row"><button class="btn btn-primary" onclick="approveChangeRequest('${cr.id}')">Valider</button><button class="btn btn-danger" onclick="rejectChangeRequest('${cr.id}')">Refuser</button></div>`:''}` : ''; })()}
     ${can('editerMateriel')||can('supprimerMateriel')||can('creerMateriel')||can('proposerModificationMateriel') ? `<div class="btn-row" style="flex-wrap:wrap;margin-top:10px;">
       ${can('editerMateriel')?`<button class="btn btn-secondary" onclick="editEquip('${e.id}')">Modifier</button>`:can('proposerModificationMateriel')?`<button class="btn btn-secondary" onclick="editEquip('${e.id}')">Proposer une modif.</button>`:''}
