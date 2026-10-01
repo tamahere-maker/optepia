@@ -121,6 +121,9 @@
   @keyframes pulse-logo{0%,100%{transform:scale(1);opacity:.85;}50%{transform:scale(1.07);opacity:1;}}
   .splash{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:70vh;gap:16px;color:var(--text-muted);font-size:13px;}
   .splash img{height:84px;width:auto;animation:pulse-logo 1.6s ease-in-out infinite;}
+  .legal-links{text-align:center;margin-top:26px;font-size:12px;color:var(--text-muted);}
+  .legal-links a{color:var(--text-muted);}
+  .brand-sign a{color:var(--text-muted);}
   .brand-sign{text-align:center;margin:8px 0 28px;color:var(--text-muted);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;}
   .brand-sign img{height:30px;width:auto;display:block;margin:0 auto 8px;opacity:.9;}
   .empty h3{color:var(--text-muted);}
@@ -369,17 +372,19 @@ function updatePwRules(inputId){
 }
 
 /* ---------- Auth actions ---------- */
+const LEGAL_VERSION = '2026-10-01';
 async function doSignUp(){
   const email = document.getElementById('au-email').value.trim();
   const password = document.getElementById('au-password').value;
   const password2 = document.getElementById('au-password2').value;
   if(!email || !password){ showToast('Email et mot de passe requis'); return; }
+  if(!document.getElementById('au-cgu') || !document.getElementById('au-cgu').checked){ showToast('Accepte les conditions d\'utilisation pour créer ton compte'); return; }
   if(!isStrongPw(password)){ showToast('Le mot de passe ne respecte pas toutes les conditions'); return; }
   if(password!==password2){ showToast('Les mots de passe ne correspondent pas'); return; }
   if(TURNSTILE_SITE_KEY!=='REMPLACE_PAR_TA_CLE_TURNSTILE' && !turnstileToken){ showToast('Merci de valider le contrôle anti-robot'); return; }
   const captchaToken = turnstileToken; turnstileToken = null; /* jeton à usage unique */
   state.busy=true; render();
-  const signUpOpts = { email, password, options: { emailRedirectTo: 'https://app.optepia.fr/confirmed.html' } };
+  const signUpOpts = { email, password, options: { emailRedirectTo: 'https://app.optepia.fr/confirmed.html', data: { cgu_accepted_at: new Date().toISOString(), cgu_version: LEGAL_VERSION } } };
   if(captchaToken) signUpOpts.options.captchaToken = captchaToken;
   const { data, error } = await sb.auth.signUp(signUpOpts);
   state.busy=false;
@@ -885,9 +890,11 @@ function renderAuthForm(isLogin){
     ${!isLogin?`<div class="field"><label>Confirmer le mot de passe</label>
       <div style="display:flex;gap:8px;"><input id="au-password2" type="password" style="flex:1;" autocomplete="new-password"><button type="button" class="btn btn-ghost" style="width:auto;" onclick="togglePwVisibility('au-password2',this)">👁</button></div>
     </div>`:''}
+    ${!isLogin?`<label style="display:flex;gap:10px;align-items:flex-start;margin:4px 0 14px;font-size:13px;color:var(--text-muted);line-height:1.45;"><input type="checkbox" id="au-cgu" style="width:20px;height:20px;flex-shrink:0;margin-top:1px;accent-color:var(--accent);"><span>J'ai lu et j'accepte les <a href="cgu.html" target="_blank" rel="noopener">conditions d'utilisation</a> et la <a href="confidentialite.html" target="_blank" rel="noopener">politique de confidentialité</a>.</span></label>`:''}
     ${isLogin?`<div style="text-align:right;margin:-4px 0 14px;"><a href="#" onclick="setAuthMode('forgot');return false;" style="color:var(--accent);font-size:13px;text-decoration:none;">Mot de passe oublié ?</a></div>`:''}
     ${TURNSTILE_SITE_KEY!=='REMPLACE_PAR_TA_CLE_TURNSTILE'?`<div class="cf-turnstile" data-theme="dark" style="margin-bottom:14px;"></div>`:''}
     <button class="btn btn-primary" ${state.busy?'disabled':''} onclick="${isLogin?'doLogin()':'doSignUp()'}">${state.busy?'<span class="spinner"></span>':(isLogin?'Se connecter':'Créer mon compte')}</button>
+    <div class="legal-links"><a href="mentions-legales.html" target="_blank" rel="noopener">Mentions légales</a> · <a href="cgu.html" target="_blank" rel="noopener">CGU</a> · <a href="confidentialite.html" target="_blank" rel="noopener">Confidentialité</a></div>
   </div>`;
 }
 function togglePwVisibility(id, btn){
@@ -1387,7 +1394,7 @@ function renderProfile(){
   <button class="btn btn-danger" style="margin-top:14px;" onclick="leaveUnit()">Quitter cette unité</button>
   `}
   <button class="btn btn-secondary" style="margin-top:10px;margin-bottom:20px;" onclick="doLogout()">Se déconnecter</button>
-  <div class="brand-sign"><img src="logo-mark.png" alt="">OPTEPIA · Gérez · Contrôlez · Tracez</div>
+  <div class="brand-sign"><img src="logo-mark.png" alt="">OPTEPIA · Gérez · Contrôlez · Tracez<div style="margin-top:8px;text-transform:none;letter-spacing:0;font-size:12px;"><a href="mentions-legales.html" target="_blank" rel="noopener">Mentions légales</a> · <a href="cgu.html" target="_blank" rel="noopener">CGU</a> · <a href="confidentialite.html" target="_blank" rel="noopener">Confidentialité</a></div></div>
   `;
 }
 function openTransferOwnership(){ state.view='transferOwnership'; render(); }

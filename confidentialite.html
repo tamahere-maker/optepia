@@ -1,0 +1,46 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="theme-color" content="#0B1014">
+<title>Politique de confidentialité — OPTEPIA</title><link rel="icon" href="icon-192.png"><style>
+:root{--bg:#0B1014;--surface:#121A20;--border:#27343E;--text:#EEF3F5;--muted:#8A9AA5;--accent:#FF7A1A;}
+@media (prefers-color-scheme:light){:root{--bg:#F3F6F7;--surface:#fff;--border:#D3DCE1;--text:#0F1A20;--muted:#5A6A74;--accent:#D94F00;}}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,sans-serif;line-height:1.6;font-size:15px}
+main{max-width:760px;margin:0 auto;padding:20px 18px 60px}
+header{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--border);max-width:760px;margin:0 auto}
+header img{height:34px;width:auto}header a{color:var(--text);text-decoration:none;font-weight:700;letter-spacing:2px}
+h1{font-size:26px;margin:18px 0 4px}h2{font-size:18px;margin:30px 0 8px;color:var(--accent)}h3{font-size:15px;margin:18px 0 4px}
+p,li{color:var(--text)}.muted{color:var(--muted);font-size:13px}ul{padding-left:20px}
+a{color:var(--accent)}
+mark.todo{background:rgba(255,178,31,.25);color:inherit;padding:0 4px;border-radius:4px;border:1px dashed #FFB21F}
+.draft{background:rgba(255,178,31,.12);border:1px solid #FFB21F;border-radius:8px;padding:10px 12px;font-size:13px;margin:14px 0}
+table{border-collapse:collapse;width:100%;font-size:13px;margin:10px 0}th,td{border:1px solid var(--border);padding:7px 9px;text-align:left;vertical-align:top}th{background:var(--surface)}
+footer{max-width:760px;margin:0 auto;padding:0 18px 40px;font-size:13px;color:var(--muted)}footer a{margin-right:12px}
+</style></head><body>
+<header><img src="logo-mark.png" alt=""><a href="/">OPTEPIA</a></header><main>
+<h1>Politique de confidentialité</h1><p class="muted">Version du 2026-10-01</p>
+<div class="draft">Version de travail : les passages surlignés sont à compléter, puis ce cadre est à supprimer et le texte à faire relire par un juriste avant la mise en service commerciale.</div>
+
+<h2>1. Qui est responsable ?</h2>
+<p>Pour les données des comptes et la gestion du service (création de compte, sécurité, facturation), le responsable de traitement est l'éditeur : <mark class="todo">[À COMPLÉTER : nom / raison sociale, adresse, e-mail de contact]</mark>. Pour les données de matériel, de prêts et de membres saisies par une unité, <b>l'unité cliente est responsable de traitement</b> et l'éditeur agit comme sous-traitant (voir l'<a href="dpa.html">accord de sous-traitance</a>).</p>
+<h2>2. Données traitées et finalités</h2>
+<table><tr><th>Données</th><th>Finalité</th><th>Base légale</th></tr>
+<tr><td>Adresse e-mail, mot de passe (chiffré), nom affiché, rôle, photo de profil facultative</td><td>Créer et sécuriser le compte, gérer les membres d'une unité</td><td>Exécution du contrat</td></tr>
+<tr><td>Fiches matériel (désignation, marque, n° de série, dates, photos, fiches techniques), contrôles (date, vérificateur, statut, observations, signature manuscrite)</td><td>Suivi et traçabilité des équipements</td><td>Exécution du contrat / intérêt légitime et obligations de sécurité du client</td></tr>
+<tr><td>Prêts et missions (nom de l'emprunteur, dates, signature, motif d'un refus)</td><td>Traçabilité des sorties de matériel</td><td>Exécution du contrat</td></tr>
+<tr><td>Journal d'activité (qui a fait quoi et quand)</td><td>Traçabilité, sécurité, preuve</td><td>Intérêt légitime</td></tr>
+<tr><td>E-mails de notification (alertes hebdomadaires, prêts à valider, validations, refus, retours)</td><td>Informer les administrateurs, vérificateurs et demandeurs</td><td>Exécution du contrat</td></tr>
+<tr><td>Données techniques (adresse IP, journaux de connexion) et jeton anti-robot</td><td>Sécurité, prévention des abus</td><td>Intérêt légitime</td></tr></table>
+<p>Aucune donnée n'est utilisée à des fins publicitaires ni vendue à des tiers. Le service n'utilise pas de cookies de suivi ni d'outil de mesure d'audience ; seuls des éléments techniques nécessaires à la connexion sont stockés dans votre navigateur.</p>
+<h2>3. Destinataires</h2>
+<p>Les données d'une unité ne sont accessibles qu'aux membres de cette unité selon leur rôle, et à l'éditeur pour la maintenance et l'assistance. Prestataires techniques (sous-traitants ultérieurs) :</p>
+<table><tr><th>Prestataire</th><th>Rôle</th><th>Localisation</th></tr>
+<tr><td>Supabase</td><td>Base de données, authentification, stockage de fichiers, fonctions</td><td><mark class="todo">[À COMPLÉTER : région du projet — à confirmer]</mark></td></tr>
+<tr><td>Cloudflare</td><td>Hébergement de l'application, protection anti-robot (Turnstile), DNS</td><td>Mondial (réseau de diffusion)</td></tr>
+<tr><td>Resend</td><td>Envoi des e-mails de notification</td><td>États-Unis</td></tr>
+<tr><td>Google Fonts, jsDelivr</td><td>Chargement de polices et de bibliothèques d'affichage (votre adresse IP leur est transmise)</td><td>Mondial</td></tr></table>
+<p>Lorsque des données sont transférées hors de l'Union européenne, elles le sont sur la base de garanties appropriées (clauses contractuelles types ou cadre de protection des données UE–États-Unis).</p>
+<h2>4. Durée de conservation</h2>
+<p>Les données sont conservées tant que le compte et l'unité existent. La suppression d'un compte retire son accès ; la suppression d'une unité efface ses données. Les sauvegardes techniques sont purgées dans un délai de <mark class="todo">[À COMPLÉTER : ex. 90 jours]</mark>. Le journal d'activité et l'historique des prêts sont conservés tant que l'unité les conserve, et supprimés avec elle.</p>
+<h2>5. Vos droits</h2>
+<p>Vous disposez des droits d'accès, de rectification, d'effacement, de limitation, d'opposition et de portabilité. Pour les données d'une unité, adressez-vous d'abord à son administrateur ; vous pouvez aussi écrire à <mark class="todo">[À COMPLÉTER : e-mail de contact]</mark>. En cas de désaccord, vous pouvez saisir la CNIL (<a href="https://www.cnil.fr">cnil.fr</a>).</p>
+<h2>6. Sécurité</h2>
+<p>Chiffrement des échanges (HTTPS), mots de passe chiffrés, règles de complexité, double authentification facultative, cloisonnement strict des données par unité (règles d'accès au niveau de la base), journal d'activité écrit côté serveur, protection anti-robot. Aucun système n'étant infaillible, toute violation de données susceptible de porter atteinte aux personnes sera notifiée dans les conditions prévues par le RGPD.</p>
+<h2>7. Modification</h2><p>Cette politique peut évoluer ; la date de version figure en haut de page.</p></main><footer><a href="mentions-legales.html">Mentions légales</a><a href="cgu.html">CGU</a><a href="confidentialite.html">Confidentialité</a><a href="dpa.html">Sous-traitance (DPA)</a><br><br><a href="/">← Retour à Optepia</a></footer></body></html>
