@@ -142,6 +142,7 @@
   .role-opt{display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:13px 14px;}
   .qr-status{font-size:13px;padding:10px 12px;border-radius:8px;margin-bottom:12px;}
   .qr-status.info{background:rgba(139,151,158,0.12);color:var(--text-muted);}
+  .qr-status.warn{background:var(--warn-bg);color:var(--warn);}
   .qr-status.ok{background:var(--ok-bg);color:var(--ok);}
   .qr-status.err{background:var(--danger-bg);color:var(--danger);}
   .toast{position:fixed;bottom:84px;left:50%;transform:translateX(-50%);background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:11px 18px;border-radius:20px;font-size:13px;font-weight:600;z-index:30;box-shadow:0 6px 20px rgba(0,0,0,0.4);max-width:88vw;text-align:center;}
@@ -257,7 +258,25 @@ function fmtHM(ts){ if(!ts) return ''; const dt=new Date(ts); if(isNaN(dt)) retu
 function fmtDT(date, ts){ const h=fmtHM(ts); return fmtDate(date)+(h?' à '+h:''); }
 function daysUntil(d){ if(!d) return null; const t=new Date((''+d).slice(0,10)+'T00:00:00'); const n=new Date(); n.setHours(0,0,0,0); return Math.round((t-n)/86400000); }
 function addYears(d,n){ if(!d) return null; const p=(''+d).slice(0,10).split('-').map(Number); return new Date(p[0]+n,p[1]-1,p[2]).toISOString().slice(0,10); }
+/* Conservation légale : un matériel réformé doit rester consultable 5 ans après la date de réforme */
+const RETENTION_YEARS = 5;
+function plusYears(d,n){ const p=(''+d).slice(0,10).split('-'); return (Number(p[0])+n)+'-'+p[1]+'-'+p[2]; }
+function reformInfo(e){
+  const rs = (e&&e.controls||[]).filter(c=>c.statut==='reforme').sort((a,b)=>b.date.localeCompare(a.date));
+  if(!rs.length) return null;
+  const date = rs[0].date.slice(0,10), until = plusYears(date, RETENTION_YEARS);
+  return { date, until, locked: daysUntil(until) > 0 };
+}
+function isReformed(e){
+  const cs = (e&&e.controls||[]).slice().sort((a,b)=>b.date.localeCompare(a.date));
+  return cs.length>0 && cs[0].statut==='reforme';
+}
+function reformBanner(e){
+  const r = reformInfo(e); if(!r) return '';
+  return `<div class="qr-status ${r.locked?'warn':'info'}" style="margin:10px 0;"><b>${isReformed(e)?'Matériel réformé':'Réforme enregistrée'} le ${fmtDate(r.date)}</b><br><span style="font-size:12px;">${r.locked?`Conservation obligatoire jusqu'au ${fmtDate(r.until)} (5 ans) en cas de contrôle : la fiche et son historique ne peuvent pas être supprimés définitivement avant cette date.`:`Délai de conservation de 5 ans écoulé depuis le ${fmtDate(r.until)} : suppression définitive possible.`}</span></div>`;
+}
 function statusOf(e){
+  if(isReformed(e)) return {label:'Réformé', cls:'badge-danger'};
   const dfv = daysUntil(e.date_fin_vie);
   if(dfv!==null && dfv<0) return {label:'Hors service', cls:'badge-danger'};
   const controls = e.controls||[];
@@ -1031,7 +1050,7 @@ function renderListResults(){
     if(state.filter==='depasse') return lbl==='Contrôle dépassé';
     if(state.filter==='jamais') return lbl==='Jamais contrôlé';
     if(state.filter==='proche') return lbl==='Contrôle proche';
-    if(state.filter==='finvie') return lbl!=='Hors service' && dfv!==null && dfv>=0 && dfv<60;
+    if(state.filter==='finvie') return lbl!=='Hors service' && lbl!=='Réformé' && dfv!==null && dfv>=0 && dfv<60;
     return true;
   }).slice().sort((a,b)=>{
     if(state.sortMode==='urgence'){
@@ -1111,6 +1130,7 @@ function renderDetail(){
     ${e.photo_url ? `<img class="thumb-lg" src="${imgSrc(e.photo_url)}" style="margin-bottom:14px;" onerror="imgFallback(this)">` : ''}
     <div class="row" style="align-items:flex-start;"><h2>${esc(e.designation)||'Sans désignation'}</h2><span class="badge ${s.cls}">${s.label}</span></div>
     <p class="muted" style="margin-bottom:14px;">${esc(e.marque)||'—'}</p>
+    ${reformBanner(e)}
     <div class="divider"></div>
     ${(e.famille||e.sous_famille)?`<div class="row"><div class="field" style="flex:1;"><label>Famille</label><p>${esc(e.famille)||'—'}</p></div><div class="field" style="flex:1;"><label>Sous-famille</label><p>${esc(e.sous_famille)||'—'}</p></div></div>`:''}
     <div class="field"><label>N° de série</label><p class="mono">${esc(e.numero_serie)||'—'}</p></div>
@@ -1386,7 +1406,7 @@ function renderProfile(){
 
   ${acc('prefs', '<span>⚙️ Affichage et aide</span>', `
     <button class="btn btn-secondary" style="margin-bottom:10px;" onclick="toggleTheme()">${document.documentElement.getAttribute('data-theme')==='light'?'🌙 Passer au thème sombre':'☀️ Passer au thème clair'}</button>
-    <a href="manuel-utilisation.pdf?v=5" target="_blank" rel="noopener" class="btn btn-secondary" style="display:block;text-align:center;text-decoration:none;">📖 Manuel d'utilisation</a>`)}
+    <a href="manuel-utilisation.pdf?v=6" target="_blank" rel="noopener" class="btn btn-secondary" style="display:block;text-align:center;text-decoration:none;">📖 Manuel d'utilisation</a>`)}
 
   ${acc('roles', '<span>ℹ️ Rôles et droits</span>', `
     <div class="card"><b style="font-size:13px;">Administrateur</b><p class="muted" style="font-size:13px;margin-top:4px;">Accès complet : matériel, membres, prêts, validations.</p></div>
@@ -1834,7 +1854,8 @@ function editEquip(id){
 function cancelAddEquip(){ state.view = equipDraft._editId ? 'detail' : 'list'; render(); }
 async function deleteEquip(id){
   const e = state.equipment.find(x=>x.id===id);
-  if(!confirm("Déplacer cette fiche vers la corbeille ? Tu pourras la restaurer depuis la corbeille de l'onglet Matériel.")) return;
+  const ri0 = reformInfo(e);
+  if(!confirm("Déplacer cette fiche vers la corbeille ? Tu pourras la restaurer depuis la corbeille de l'onglet Matériel."+(ri0&&ri0.locked?"\n\nMatériel réformé : la fiche restera conservée jusqu'au "+fmtDate(ri0.until)+" (5 ans)":""))) return;
   const { error } = await sb.from('equipment').update({deleted_at: new Date().toISOString()}).eq('id', id);
   if(error){ showToast(error.message); return; }
   await logAction('Matériel mis à la corbeille', e.designation);
@@ -1851,6 +1872,8 @@ async function restoreEquip(id){
 }
 async function permanentlyDeleteEquip(id){
   const e = state.equipment.find(x=>x.id===id);
+  const ri = reformInfo(e);
+  if(ri && ri.locked){ alert(`Ce matériel a été réformé le ${fmtDate(ri.date)}.\n\nIl doit être conservé jusqu'au ${fmtDate(ri.until)} (5 ans) en cas de contrôle : suppression définitive impossible avant cette date.`); return; }
   if(!confirm(`Supprimer DÉFINITIVEMENT « ${e?e.designation:''} » ? Impossible à annuler.`)) return;
   const { error } = await sb.from('equipment').delete().eq('id', id);
   if(error){ showToast(error.message); return; }
@@ -1877,7 +1900,7 @@ function renderTrash(){
       </div>
       <div class="btn-row" style="margin-top:10px;">
         <button class="btn btn-secondary" onclick="restoreEquip('${e.id}')">Restaurer</button>
-        ${can('supprimerMateriel')?`<button class="btn btn-danger" onclick="permanentlyDeleteEquip('${e.id}')">Supprimer définitivement</button>`:''}
+        ${can('supprimerMateriel')?((reformInfo(e)||{}).locked?`<span class="muted" style="font-size:12px;align-self:center;">🔒 Réformé : conservé jusqu'au ${fmtDate(reformInfo(e).until)}</span>`:`<button class="btn btn-danger" onclick="permanentlyDeleteEquip('${e.id}')">Supprimer définitivement</button>`):''}
       </div>
     </div>`).join('')}
   `;
@@ -2387,7 +2410,7 @@ function dashData(){
   const d = {total:active.length, conforme:0, depasse:0, jamais:0, proche:0, finvie:0, hs:0};
   active.forEach(e=>{
     const lbl = statusOf(e).label, dfv = daysUntil(e.date_fin_vie);
-    if(lbl==='Hors service') d.hs++;
+    if(lbl==='Hors service' || lbl==='Réformé') d.hs++;
     else {
       if(lbl==='Contrôle dépassé') d.depasse++; else if(lbl==='Jamais contrôlé') d.jamais++; else if(lbl==='Contrôle proche') d.proche++; else if(lbl==='Conforme') d.conforme++;
       if(dfv!==null && dfv>=0 && dfv<60) d.finvie++;
@@ -2504,7 +2527,7 @@ function startBatchControl(){
 }
 function renderBatchControl(){
   const bc = state.bc;
-  const list = state.equipment.filter(e=>!e.deleted_at && statusOf(e).label!=='Hors service')
+  const list = state.equipment.filter(e=>!e.deleted_at && statusOf(e).label!=='Hors service' && statusOf(e).label!=='Réformé')
     .slice().sort((a,b)=> (urgencyScore(a)-urgencyScore(b)) || (a.designation||'').localeCompare(b.designation||''));
   const n = Object.keys(bc.sel).length;
   return `
