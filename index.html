@@ -641,22 +641,173 @@ async function collectAndResolveUnitFiles(){
   if(state.unit) paths.push(state.unit.avatar_url);
   await resolveSignedUrls(paths);
 }
+/* ---- Lecture QR / Data Matrix / codes-barres ---- */
+let _zxP=null;
+function loadZxing(){
+  if(window.ZXing) return Promise.resolve(window.ZXing);
+  if(_zxP) return _zxP;
+  _zxP = new Promise((res,rej)=>{
+    const sc=document.createElement('script');
+    sc.src='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';
+    sc.onload=()=>window.ZXing?res(window.ZXing):(_zxP=null,rej(new Error('zxing')));
+    sc.onerror=()=>{ _zxP=null; rej(new Error('zxing')); };
+    document.head.appendChild(sc);
+  });
+  return _zxP;
+}
+let _bd=undefined;
+async function getBarcodeDetector(){
+  if(_bd!==undefined) return _bd;
+  _bd=null;
+  try{
+    if('BarcodeDetector' in window){
+      let f=['qr_code','data_matrix','code_128','code_39','ean_13','pdf417','aztec'];
+      try{ const sup=await BarcodeDetector.getSupportedFormats(); f=f.filter(x=>sup.includes(x)); }catch(e){}
+      if(f.length) _bd=new BarcodeDetector({formats:f});
+    }
+  }catch(e){ _bd=null; }
+  return _bd;
+}
+let _zxReader=null;
+function zxReader(ZX){
+  if(_zxReader) return _zxReader;
+  const hints=new Map();
+  hints.set(ZX.DecodeHintType.POSSIBLE_FORMATS,[ZX.BarcodeFormat.QR_CODE,ZX.BarcodeFormat.DATA_MATRIX,ZX.BarcodeFormat.CODE_128,ZX.BarcodeFormat.CODE_39,ZX.BarcodeFormat.EAN_13,ZX.BarcodeFormat.PDF_417,ZX.BarcodeFormat.AZTEC]);
+  hints.set(ZX.DecodeHintType.TRY_HARDER,true);
+  _zxReader=new ZX.MultiFormatReader(); _zxReader.setHints(hints);
+  return _zxReader;
+}
+function zxDecodeCanvas(ZX,canvas){
+  const w=canvas.width,h=canvas.height;
+  const d=canvas.getContext('2d').getImageData(0,0,w,h).data;
+  const lum=new Uint8ClampedArray(w*h);
+  for(let i=0,j=0;i<lum.length;i++,j+=4) lum[i]=(d[j]*77+d[j+1]*150+d[j+2]*29)>>8;
+  const src=new ZX.RGBLuminanceSource(lum,w,h);
+  const rd=zxReader(ZX);
+  for(const inv of [false,true]){
+    try{
+      const bmp=new ZX.BinaryBitmap(new ZX.HybridBinarizer(inv?src.invert():src));
+      const r=rd.decode(bmp);
+      if(r&&r.getText()) return r.getText();
+    }catch(e){}
+  }
+  return null;
+}
+async function decodeCanvas(canvas){
+  const bd=await getBarcodeDetector();
+  if(bd){ try{ const r=await bd.detect(canvas); if(r&&r.length&&r[0].rawValue) return r[0].rawValue; }catch(e){} }
+  try{ const ZX=await loadZxing(); return zxDecodeCanvas(ZX,canvas); }catch(e){ return null; }
+}
 function decodeQrFromDataUrl(dataUrl){
   return new Promise((resolve)=>{
     const img = new Image();
-    img.onload = ()=>{
+    img.onload = async ()=>{
       const c = document.getElementById('workCanvas');
-      function tryDecode(maxDim){
+      for(const maxDim of [1600,1000,2400,700]){
         let w=img.width,h=img.height;
         if(w>maxDim||h>maxDim){ if(w>h){ h=Math.round(h*maxDim/w); w=maxDim; } else { w=Math.round(w*maxDim/h); h=maxDim; } }
-        c.width=w; c.height=h; const ctx=c.getContext('2d'); ctx.drawImage(img,0,0,w,h);
-        const imgData = ctx.getImageData(0,0,w,h);
-        return (typeof jsQR==='function') ? jsQR(imgData.data,w,h,{inversionAttempts:'attemptBoth'}) : null;
+        c.width=w; c.height=h; c.getContext('2d').drawImage(img,0,0,w,h);
+        const r = await decodeCanvas(c);
+        if(r){ resolve(r); return; }
       }
-      const result = tryDecode(1600) || tryDecode(900) || tryDecode(2400);
-      resolve(result ? result.data : null);
+      resolve(null);
     };
+    img.onerror=()=>resolve(null);
     img.src = dataUrl;
+  });
+}
+/* Extrait le numéro de série d'un contenu de code : JSON Optepia, URL, GS1 (AI 21) ou texte brut */
+function parseScanned(data){
+  const out={};
+  const t=String(data||'').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001c]/g,'').trim();
+  try{
+    const obj=JSON.parse(t);
+    if(obj && typeof obj==='object'){
+      if(obj.numeroSerie) out.numero_serie=String(obj.numeroSerie);
+      const map={designation:'designation',marque:'marque',identification:'identification',dateFabrication:'date_fabrication',datePremiereUtilisation:'date_premiere_utilisation',dateFinVie:'date_fin_vie'};
+      Object.keys(map).forEach(k=>{ if(obj[k]) out[map[k]]=String(obj[k]); });
+      if(out.numero_serie) return out;
+    }
+  }catch(e){}
+  if(/^https?:\/\//i.test(t)){
+    try{
+      const u=new URL(t);
+      for(const k of ['serial','sn','s','serie','serialnumber','numeroserie','numero_serie','numero','id']){
+        for(const [pk,pv] of u.searchParams.entries()){ if(pk.toLowerCase()===k && pv){ out.numero_serie=pv; return out; } }
+      }
+    }catch(e){}
+  }
+  /* GS1 entre parenthèses : (01)GTIN(21)SERIE(10)LOT */
+  let m=t.match(/\(21\)([^(\u001d]+)/);
+  if(m){ out.numero_serie=m[1].trim(); return out; }
+  /* GS1 brut : 01 + 14 chiffres + 21 + série (jusqu'au séparateur GS ou la fin) */
+  m=t.match(/^\u001d?01\d{14}21([^\u001d]+)/);
+  if(m){ out.numero_serie=m[1].trim(); return out; }
+  out.numero_serie=t;
+  return out;
+}
+/* Scanner caméra en direct */
+function openLiveScanner(){
+  return new Promise(async resolve=>{
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ resolve({fallback:true}); return; }
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;z-index:1000;background:#000;display:flex;flex-direction:column;';
+    ov.innerHTML=`<div style="flex:1;position:relative;overflow:hidden;">
+        <video id="scn-v" playsinline muted autoplay style="width:100%;height:100%;object-fit:cover;"></video>
+        <div style="position:absolute;left:50%;top:50%;width:62%;aspect-ratio:1;transform:translate(-50%,-50%);border:3px solid #37D69A;border-radius:14px;box-shadow:0 0 0 100vmax rgba(0,0,0,.45);"></div>
+        <div id="scn-msg" style="position:absolute;left:12px;right:12px;top:calc(env(safe-area-inset-top,0px) + 14px);text-align:center;color:#fff;font-size:14px;text-shadow:0 1px 3px #000;">Place le code dans le cadre, à 10–20 cm</div>
+      </div>
+      <div style="display:flex;gap:10px;padding:12px 14px calc(env(safe-area-inset-bottom,0px) + 12px);background:#0b0f14;">
+        <button class="btn btn-secondary" id="scn-photo" style="flex:1;">📷 Photo / import</button>
+        <button class="btn btn-ghost" id="scn-x" style="flex:1;">Annuler</button>
+      </div>`;
+    document.body.appendChild(ov);
+    const video=ov.querySelector('#scn-v'), msg=ov.querySelector('#scn-msg');
+    let stream=null, stopped=false;
+    const finish=(v)=>{ if(stopped) return; stopped=true; try{ stream&&stream.getTracks().forEach(t=>t.stop()); }catch(e){} ov.remove(); resolve(v); };
+    ov.querySelector('#scn-x').onclick=()=>finish(null);
+    ov.querySelector('#scn-photo').onclick=()=>finish({fallback:true});
+    try{
+      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false});
+    }catch(e){ finish({fallback:true,denied:true}); return; }
+    if(stopped){ try{stream.getTracks().forEach(t=>t.stop());}catch(e){} return; }
+    video.srcObject=stream;
+    try{ await video.play(); }catch(e){}
+    try{
+      const tr=stream.getVideoTracks()[0], cap=tr.getCapabilities?tr.getCapabilities():{};
+      const adv=[];
+      if(cap.focusMode && cap.focusMode.includes('continuous')) adv.push({focusMode:'continuous'});
+      if(cap.zoom){ adv.push({zoom:Math.min(cap.zoom.max||2,Math.max(cap.zoom.min||1,2))}); }
+      if(adv.length) await tr.applyConstraints({advanced:adv}).catch(()=>{});
+    }catch(e){}
+    const cv=document.createElement('canvas');
+    const bd=await getBarcodeDetector();
+    let zx=null; if(!bd){ try{ zx=await loadZxing(); }catch(e){ msg.textContent='Lecteur indisponible (connexion ?) — utilise « Photo / import »'; } }
+    let n=0;
+    const loop=async()=>{
+      if(stopped) return;
+      const vw=video.videoWidth, vh=video.videoHeight;
+      if(vw&&vh){
+        n++;
+        try{
+          let found=null;
+          if(bd){ const r=await bd.detect(video); if(r&&r.length&&r[0].rawValue) found=r[0].rawValue; }
+          if(!found && (zx||!bd) && n%2===0){
+            if(!zx){ try{ zx=await loadZxing(); }catch(e){} }
+            if(zx){
+              /* zone centrale (le cadre), pleine résolution */
+              const side=Math.round(Math.min(vw,vh)*0.75), sx=Math.round((vw-side)/2), sy=Math.round((vh-side)/2);
+              cv.width=cv.height=Math.min(side,1000);
+              cv.getContext('2d').drawImage(video,sx,sy,side,side,0,0,cv.width,cv.height);
+              found=zxDecodeCanvas(zx,cv);
+            }
+          }
+          if(found){ finish({data:found}); return; }
+        }catch(e){}
+      }
+      setTimeout(loop,90);
+    };
+    loop();
   });
 }
 let photoCallback = null;
@@ -2194,24 +2345,25 @@ async function applySharedFile(id, field, label, logText){
   state.busy=false; render();
 }
 function pickEquipPhoto(){ syncEquipDraftFromDom(); pickPhotoCrop(out=>{ equipDraft.photo = out; render(); }); }
+function applyScanned(data){
+  const p=parseScanned(data);
+  Object.keys(p).forEach(k=>{ if(p[k]) equipDraft[k]=p[k]; });
+  render();
+  showToast('Numéro de série rempli : '+(p.numero_serie||'').slice(0,40));
+}
 async function scanQr(){
   syncEquipDraftFromDom();
-  showToast('Ouverture de la caméra…');
-  pickPhoto(async (raw)=>{
-    showToast('Lecture du QR code…');
-    const data = await decodeQrFromDataUrl(raw);
-    if(!data){ showToast('Aucun QR code détecté — réessaie avec une photo plus nette'); return; }
-    let matched = false;
-    try{
-      const obj = JSON.parse(data);
-      if(obj && obj.numeroSerie){ equipDraft.numero_serie = obj.numeroSerie; matched=true; }
-      const map = {designation:'designation',marque:'marque',identification:'identification',dateFabrication:'date_fabrication',datePremiereUtilisation:'date_premiere_utilisation',dateFinVie:'date_fin_vie'};
-      Object.keys(map).forEach(k=>{ if(obj[k]){ equipDraft[map[k]] = obj[k]; } });
-    }catch(err){ /* pas du JSON : contenu brut */ }
-    if(!matched) equipDraft.numero_serie = data.trim();
-    render();
-    showToast('Numéro de série rempli depuis le QR code');
-  });
+  const r = await openLiveScanner();
+  if(r && r.data){ applyScanned(r.data); return; }
+  if(r && r.fallback){
+    if(r.denied) showToast('Caméra refusée — choisis une photo du code');
+    pickPhoto(async (raw)=>{
+      showToast('Lecture du code…');
+      const data = await decodeQrFromDataUrl(raw);
+      if(!data){ showToast('Aucun code détecté — rapproche-toi et évite les reflets'); return; }
+      applyScanned(data);
+    });
+  }
 }
 function duplicateEquip(id){
   const e = state.equipment.find(x=>x.id===id);
