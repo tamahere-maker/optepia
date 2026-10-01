@@ -25,6 +25,19 @@
     --ok:#0C8A63; --warn:#A86A00; --danger:#C4243A;
     --ok-bg:rgba(12,138,99,0.12); --warn-bg:rgba(168,106,0,0.13); --danger-bg:rgba(196,36,58,0.11);
   }
+  .hd-avatars{position:relative;width:56px;height:52px;flex-shrink:0;margin-left:12px;cursor:pointer;}
+  .hd-team{position:absolute;left:0;top:0;width:44px;height:44px;border-radius:50%;object-fit:cover;border:2px solid var(--border);background:var(--surface2);display:flex;align-items:center;justify-content:center;overflow:hidden;}
+  .hd-team.hd-fallback img{height:62%;width:auto;}
+  .hd-me{position:absolute;right:0;bottom:0;width:28px;height:28px;border-radius:50%;object-fit:cover;border:2px solid var(--bg);background:var(--surface2);box-shadow:0 1px 4px rgba(0,0,0,.35);}
+  .hd-dot{background:var(--brand-grad);color:var(--on-accent);font-size:10px;font-weight:700;font-family:var(--font-head);display:flex;align-items:center;justify-content:center;}
+  .sheet-ov{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;}
+  .sheet-box{width:100%;max-width:480px;background:var(--surface);border-radius:16px 16px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px;}
+  .crop-ov{position:fixed;inset:0;z-index:210;background:rgba(5,8,10,.96);display:flex;align-items:center;justify-content:center;overflow:auto;}
+  .crop-box{display:flex;flex-direction:column;align-items:center;gap:12px;padding:20px;width:100%;max-width:420px;}
+  .crop-stage{position:relative;overflow:hidden;background:#000;border-radius:6px;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none;}
+  .crop-stage img{position:absolute;max-width:none;pointer-events:none;-webkit-user-drag:none;}
+  .crop-mask{position:absolute;inset:0;border-radius:50%;box-shadow:0 0 0 999px rgba(0,0,0,.62);border:2px solid rgba(255,255,255,.85);pointer-events:none;}
+  .crop-zoom{width:100%;accent-color:#FF7A1A;}
   .logo-wm{display:block;height:auto;}
   :root[data-theme="light"] .logo-wm{filter:brightness(0) saturate(100%);opacity:.9;}
   .pw-rules{margin:8px 0 2px;padding:0;list-style:none;font-size:12px;color:var(--text-muted);}
@@ -586,6 +599,93 @@ document.getElementById('photoInput').addEventListener('change', async (e)=>{
   photoCallback(raw);
 });
 function pickPhoto(cb){ photoCallback = cb; document.getElementById('photoInput').click(); }
+
+/* ---- Photo de profil / d'équipe : galerie ou appareil photo, puis recadrage rond ---- */
+function chooseImageSource(){
+  return new Promise(resolve=>{
+    const ov = document.createElement('div'); ov.className = 'sheet-ov';
+    ov.innerHTML = `<div class="sheet-box">
+      <h3 style="margin:0 0 4px;text-align:center;color:var(--text);">Choisir une photo</h3>
+      <button class="btn btn-secondary" id="src-gal">🖼️ Galerie / importer un fichier</button>
+      <button class="btn btn-secondary" id="src-cam">📷 Prendre une photo</button>
+      <button class="btn btn-ghost" id="src-no">Annuler</button></div>`;
+    document.body.appendChild(ov);
+    const pick = (cam)=>{
+      ov.remove();
+      const inp = document.createElement('input'); inp.type='file'; inp.accept='image/*';
+      if(cam) inp.setAttribute('capture','user');
+      inp.style.display='none'; document.body.appendChild(inp);
+      inp.addEventListener('change', ()=>{ const f = inp.files && inp.files[0]; inp.remove(); resolve(f||null); });
+      inp.click();
+    };
+    ov.querySelector('#src-gal').onclick = ()=>pick(false);
+    ov.querySelector('#src-cam').onclick = ()=>pick(true);
+    ov.querySelector('#src-no').onclick = ()=>{ ov.remove(); resolve(null); };
+    ov.addEventListener('click', e=>{ if(e.target===ov){ ov.remove(); resolve(null); } });
+  });
+}
+function openCropper(url){
+  return new Promise(resolve=>{
+    const img = new Image();
+    img.onerror = ()=>{ showToast('Image illisible'); resolve(null); };
+    img.onload = ()=>{
+      const W = img.naturalWidth, H = img.naturalHeight;
+      const S = Math.min(window.innerWidth - 40, 340);
+      const base = S / Math.min(W, H);
+      let z = 1, px = W/2, py = H/2;   // (px,py) = point de l'image au centre du cadre
+      const ov = document.createElement('div'); ov.className = 'crop-ov';
+      ov.innerHTML = `<div class="crop-box">
+        <h3 style="margin:0;color:#fff;text-align:center;">Recadrer la photo</h3>
+        <p style="margin:0;color:#9aa8b2;font-size:12px;text-align:center;">Glisse pour déplacer · pince ou curseur pour zoomer</p>
+        <div class="crop-stage" style="width:${S}px;height:${S}px;"><img alt=""><div class="crop-mask"></div></div>
+        <input type="range" class="crop-zoom" min="1" max="4" step="0.01" value="1">
+        <div style="display:flex;gap:10px;width:100%;"><button class="btn btn-secondary" id="cr-no">Annuler</button><button class="btn btn-primary" id="cr-ok">Valider</button></div></div>`;
+      document.body.appendChild(ov);
+      const stage = ov.querySelector('.crop-stage'), im = stage.querySelector('img'), zoom = ov.querySelector('.crop-zoom');
+      im.src = url;
+      function layout(){
+        const s = base * z;
+        px = Math.min(Math.max(px, S/2/s), W - S/2/s); py = Math.min(Math.max(py, S/2/s), H - S/2/s);
+        im.style.width = (W*s)+'px'; im.style.height = (H*s)+'px';
+        im.style.left = (S/2 - px*s)+'px'; im.style.top = (S/2 - py*s)+'px';
+      }
+      layout();
+      zoom.addEventListener('input', ()=>{ z = parseFloat(zoom.value); layout(); });
+      const pts = new Map(); let lastDist = 0;
+      stage.addEventListener('pointerdown', e=>{ stage.setPointerCapture(e.pointerId); pts.set(e.pointerId,{x:e.clientX,y:e.clientY}); lastDist = 0; });
+      stage.addEventListener('pointermove', e=>{
+        if(!pts.has(e.pointerId)) return;
+        const prev = pts.get(e.pointerId), cur = {x:e.clientX,y:e.clientY};
+        if(pts.size===1){ px -= (cur.x-prev.x)/(base*z); py -= (cur.y-prev.y)/(base*z); }
+        pts.set(e.pointerId, cur);
+        if(pts.size===2){
+          const [a,b] = [...pts.values()]; const d = Math.hypot(a.x-b.x, a.y-b.y);
+          if(lastDist) z = Math.min(4, Math.max(1, z * d/lastDist));
+          lastDist = d; zoom.value = z;
+        }
+        layout();
+      });
+      const up = e=>{ pts.delete(e.pointerId); lastDist = 0; };
+      stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up);
+      stage.addEventListener('wheel', e=>{ e.preventDefault(); z = Math.min(4, Math.max(1, z * (e.deltaY<0?1.08:0.93))); zoom.value = z; layout(); }, {passive:false});
+      const close = (v)=>{ ov.remove(); resolve(v); };
+      ov.querySelector('#cr-no').onclick = ()=>close(null);
+      ov.querySelector('#cr-ok').onclick = ()=>{
+        const s = base*z, c = document.createElement('canvas'); c.width = c.height = 400;
+        c.getContext('2d').drawImage(img, px - S/2/s, py - S/2/s, S/s, S/s, 0, 0, 400, 400);
+        close(c.toDataURL('image/jpeg', 0.85));
+      };
+    };
+    img.src = url;
+  });
+}
+async function pickCropPhoto(cb){
+  const f = await chooseImageSource(); if(!f) return;
+  const url = URL.createObjectURL(f);
+  const out = await openCropper(url);
+  URL.revokeObjectURL(url);
+  if(out) cb(out);
+}
 document.getElementById('pdfInput').addEventListener('change', async (e)=>{
   const file = e.target.files[0]; e.target.value='';
   if(!file) return;
@@ -651,16 +751,22 @@ function render(){
   afterRender();
 }
 function renderTopbar(){
+  const hide = `onerror="this.style.display='none'"`;
+  const team = state.unit.avatar_url
+    ? `<img class="hd-team" src="${imgSrc(state.unit.avatar_url)}" ${hide} alt="">`
+    : `<div class="hd-team hd-fallback"><img src="logo-mark.png" alt=""></div>`;
+  const me = state.myAvatarUrl
+    ? `<img class="hd-me" src="${imgSrc(state.myAvatarUrl)}" ${hide} alt="">`
+    : `<div class="hd-me hd-dot">${esc(initials(state.myDisplayName))}</div>`;
   return `
   <div class="topbar">
-    <div>
+    <div style="min-width:0;">
       <div class="brand" onclick="openUnitSwitcher()" style="cursor:pointer;gap:10px;">
-        ${state.unit.avatar_url?`<img src="${imgSrc(state.unit.avatar_url)}" onerror="imgFallback(this)" style="width:36px;height:36px;border-radius:8px;object-fit:cover;flex-shrink:0;">`:''}
-        <h2 style="margin:0;line-height:30px;font-size:15px;">${esc(state.unit.name)}</h2>
+        <h2 style="margin:0;line-height:30px;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(state.unit.name)}</h2>
       </div>
       <small style="color:var(--text-muted);font-size:11px;">${esc(ROLES[state.role].label)} · changer d'unité</small>
     </div>
-    <img src="logo-mark.png" alt="Optepia" style="height:34px;width:auto;flex-shrink:0;margin-left:12px;">
+    <div class="hd-avatars" onclick="goto('profile')" title="Mon profil">${team}${me}</div>
   </div>`;
 }
 function renderNav(){
@@ -1188,7 +1294,7 @@ function renderProfile(){
     <div style="margin-bottom:16px;">
       <h3 style="margin-bottom:8px;">Photo de l'équipe</h3>
       <div class="row" style="justify-content:flex-start;gap:12px;">
-        ${state.unit.avatar_url?`<img src="${imgSrc(state.unit.avatar_url)}" onerror="imgFallback(this)" style="width:56px;height:56px;border-radius:10px;object-fit:cover;">`:''}
+        ${state.unit.avatar_url?`<img src="${imgSrc(state.unit.avatar_url)}" onerror="imgFallback(this)" style="width:56px;height:56px;border-radius:50%;object-fit:cover;">`:''}
         <button class="btn btn-ghost" style="width:auto;" onclick="pickTeamPhoto()">${state.unit.avatar_url?'Changer':'Ajouter'} la photo</button>
       </div>
     </div>
@@ -1399,26 +1505,26 @@ async function disableMfa(factorId){
   showToast('Double authentification désactivée');
 }
 function pickAvatarPhoto(){
-  pickPhoto(async (raw)=>{
+  pickCropPhoto(async (resized)=>{
     try{
-      const resized = await resizeDataUrl(raw, 400, 0.7);
       const url = await uploadImage(resized, `${state.unit.id}/avatars/${state.myMemberId}.jpg`);
       const { error } = await sb.from('unit_members').update({avatar_url:url}).eq('id', state.myMemberId);
       if(error) throw error;
       state.myAvatarUrl = url;
-      await refreshAll(); render();
+      delete signedUrlCache[url];
+      await refreshAll(); await resolveSignedUrls([url]); render();
       showToast('Photo mise à jour');
     }catch(err){ showToast(err.message); }
   });
 }
 function pickTeamPhoto(){
-  pickPhoto(async (raw)=>{
+  pickCropPhoto(async (resized)=>{
     try{
-      const resized = await resizeDataUrl(raw, 500, 0.7);
       const url = await uploadImage(resized, `${state.unit.id}/avatar.jpg`);
       const { error } = await sb.from('units').update({avatar_url:url}).eq('id', state.unit.id);
       if(error) throw error;
       state.unit.avatar_url = url;
+      delete signedUrlCache[url];
       await resolveSignedUrls([url]);
       render();
       showToast("Photo de l'équipe mise à jour");
