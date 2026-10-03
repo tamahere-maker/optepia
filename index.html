@@ -757,10 +757,11 @@ function openLiveScanner(){
     ov.innerHTML=`<div style="flex:1;position:relative;overflow:hidden;">
         <video id="scn-v" playsinline muted autoplay style="width:100%;height:100%;object-fit:cover;"></video>
         <div style="position:absolute;left:50%;top:50%;width:62%;aspect-ratio:1;transform:translate(-50%,-50%);border:3px solid #37D69A;border-radius:14px;box-shadow:0 0 0 100vmax rgba(0,0,0,.45);"></div>
-        <div id="scn-msg" style="position:absolute;left:12px;right:12px;top:calc(env(safe-area-inset-top,0px) + 14px);text-align:center;color:#fff;font-size:14px;text-shadow:0 1px 3px #000;">Place le code dans le cadre, à 10–20 cm</div>
+        <div id="scn-msg" style="position:absolute;left:12px;right:12px;top:calc(env(safe-area-inset-top,0px) + 14px);text-align:center;color:#fff;font-size:14px;text-shadow:0 1px 3px #000;">Place le code dans le cadre, à 10–20 cm · touche l'image pour faire la mise au point</div>
       </div>
       <div style="display:flex;gap:10px;padding:12px 14px calc(env(safe-area-inset-bottom,0px) + 12px);background:#0b0f14;">
-        <button class="btn btn-secondary" id="scn-photo" style="flex:1;">📷 Photo / import</button>
+        <button class="btn btn-primary" id="scn-snap" style="flex:1;">📸 Capturer</button>
+        <button class="btn btn-secondary" id="scn-photo" style="flex:1;">🖼️ Import</button>
         <button class="btn btn-ghost" id="scn-x" style="flex:1;">Annuler</button>
       </div>`;
     document.body.appendChild(ov);
@@ -770,7 +771,7 @@ function openLiveScanner(){
     ov.querySelector('#scn-x').onclick=()=>finish(null);
     ov.querySelector('#scn-photo').onclick=()=>finish({fallback:true});
     try{
-      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false});
+      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:2560},height:{ideal:1440}},audio:false});
     }catch(e){ finish({fallback:true,denied:true}); return; }
     if(stopped){ try{stream.getTracks().forEach(t=>t.stop());}catch(e){} return; }
     video.srcObject=stream;
@@ -783,6 +784,45 @@ function openLiveScanner(){
       if(adv.length) await tr.applyConstraints({advanced:adv}).catch(()=>{});
     }catch(e){}
     const cv=document.createElement('canvas');
+    const track=stream.getVideoTracks()[0];
+    let ic=null; try{ if(window.ImageCapture) ic=new ImageCapture(track); }catch(e){}
+    const refocus=async(x,y)=>{
+      try{
+        const cap=track.getCapabilities?track.getCapabilities():{};
+        if(cap.focusMode){
+          if(cap.focusMode.includes('single-shot')){
+            const a={focusMode:'single-shot'}; if(cap.pointsOfInterest) a.pointsOfInterest=[{x:x==null?.5:x,y:y==null?.5:y}];
+            await track.applyConstraints({advanced:[a]}).catch(()=>{});
+            await new Promise(r=>setTimeout(r,500));
+          }
+          if(cap.focusMode.includes('continuous')) await track.applyConstraints({advanced:[{focusMode:'continuous'}]}).catch(()=>{});
+        }
+      }catch(e){}
+    };
+    let snapping=false;
+    /* photo pleine résolution avec mise au point automatique du téléphone, puis décodage */
+    const snap=async(manual)=>{
+      if(stopped||snapping||!ic) return null;
+      snapping=true;
+      try{
+        if(manual) msg.textContent='Mise au point…';
+        const blob=await ic.takePhoto();
+        const bmp=await createImageBitmap(blob);
+        const c=document.getElementById('workCanvas');
+        for(const maxDim of [1800,1200,2600]){
+          let w=bmp.width,h=bmp.height; const k=Math.min(1,maxDim/Math.max(w,h)); w=Math.round(w*k); h=Math.round(h*k);
+          c.width=w; c.height=h; c.getContext('2d').drawImage(bmp,0,0,w,h);
+          const r=await decodeCanvas(c); if(r){ snapping=false; return r; }
+        }
+        if(manual) msg.textContent='Code non lu — rapproche-toi, évite les reflets, puis réessaie';
+      }catch(e){ if(manual) msg.textContent='Capture impossible — utilise « Import »'; }
+      snapping=false; return null;
+    };
+    ov.querySelector('#scn-snap').onclick=async()=>{ const r=await snap(true); if(r) finish({data:r}); };
+    ov.querySelector('video').addEventListener('click',ev=>{
+      const rc=video.getBoundingClientRect(); refocus((ev.clientX-rc.left)/rc.width,(ev.clientY-rc.top)/rc.height);
+    });
+    let lastSnap=Date.now();
     const bd=await getBarcodeDetector();
     let zx=null; if(!bd){ try{ zx=await loadZxing(); }catch(e){ msg.textContent='Lecteur indisponible (connexion ?) — utilise « Photo / import »'; } }
     let n=0;
@@ -799,11 +839,12 @@ function openLiveScanner(){
             if(zx){
               /* zone centrale (le cadre), pleine résolution */
               const side=Math.round(Math.min(vw,vh)*0.75), sx=Math.round((vw-side)/2), sy=Math.round((vh-side)/2);
-              cv.width=cv.height=Math.min(side,1000);
+              cv.width=cv.height=Math.min(side,1400);
               cv.getContext('2d').drawImage(video,sx,sy,side,side,0,0,cv.width,cv.height);
               found=zxDecodeCanvas(zx,cv);
             }
           }
+          if(!found && ic && Date.now()-lastSnap>3000){ lastSnap=Date.now(); found=await snap(false); }
           if(found){ finish({data:found}); return; }
         }catch(e){}
       }
@@ -2346,11 +2387,25 @@ async function applySharedFile(id, field, label, logText){
   state.busy=false; render();
 }
 function pickEquipPhoto(){ syncEquipDraftFromDom(); pickPhotoCrop(out=>{ equipDraft.photo = out; render(); }); }
+/* Numéro de série Petzl récent : AAXnnnnn… → AA = année, X = mois (A=janvier … L=décembre) */
+function petzlFabDate(serial){
+  const m=String(serial||'').trim().toUpperCase().match(/^(\d{2})([A-L])\d/);
+  if(!m) return null;
+  const yy=parseInt(m[1],10), mo=m[2].charCodeAt(0)-64;
+  if(yy<10||yy>new Date().getFullYear()%100+1) return null;
+  return `20${m[1]}-${String(mo).padStart(2,'0')}-01`;
+}
 function applyScanned(data){
   const p=parseScanned(data);
   Object.keys(p).forEach(k=>{ if(p[k]) equipDraft[k]=p[k]; });
+  let extra='';
+  const marque=((document.getElementById('f-marque')||{}).value||equipDraft.marque||'');
+  if(/petzl/i.test(marque) && !equipDraft.date_fabrication){
+    const d=petzlFabDate(p.numero_serie);
+    if(d){ equipDraft.date_fabrication=d; extra=' · fabrication '+fmtDate(d); }
+  }
   render();
-  showToast('Numéro de série rempli : '+(p.numero_serie||'').slice(0,40));
+  showToast('Numéro de série rempli : '+(p.numero_serie||'').slice(0,40)+extra);
 }
 async function scanQr(){
   syncEquipDraftFromDom();
