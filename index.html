@@ -27,6 +27,8 @@
   }
   .hd-avatars{position:relative;width:56px;height:52px;flex-shrink:0;margin-left:12px;cursor:pointer;}
   .hd-team{position:absolute;left:0;top:0;width:44px;height:44px;border-radius:50%;object-fit:cover;border:2px solid var(--border);background:var(--surface2);display:flex;align-items:center;justify-content:center;overflow:hidden;}
+  .hd-logo{height:30px;width:auto;flex-shrink:0;margin-left:10px;opacity:.95;}
+  @media (max-width:340px){.hd-logo{display:none;}}
   .hd-team.hd-fallback img{height:62%;width:auto;}
   .hd-me{position:absolute;right:0;bottom:0;width:28px;height:28px;border-radius:50%;object-fit:cover;border:2px solid var(--bg);background:var(--surface2);box-shadow:0 1px 4px rgba(0,0,0,.35);}
   .hd-dot{background:var(--brand-grad);color:var(--on-accent);font-size:10px;font-weight:700;font-family:var(--font-head);display:flex;align-items:center;justify-content:center;}
@@ -1123,13 +1125,12 @@ function renderTopbar(){
     : `<div class="hd-me hd-dot">${esc(initials(state.myDisplayName))}</div>`;
   return `
   <div class="topbar">
-    <div style="min-width:0;">
-      <div class="brand" onclick="openUnitSwitcher()" style="cursor:pointer;gap:10px;">
-        <h2 style="margin:0;line-height:30px;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(state.unit.name)}</h2>
-      </div>
-      <small style="color:var(--text-muted);font-size:11px;">${esc(ROLES[state.role].label)} · changer d'unité</small>
+    <div class="hd-avatars" onclick="openUnitSwitcher()" title="Changer d'unité" style="margin:0 12px 0 0;">${team}${me}</div>
+    <div style="min-width:0;flex:1;">
+      <h2 onclick="openUnitSwitcher()" style="margin:0;line-height:24px;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;">${esc(state.unit.name)}</h2>
+      <small style="color:var(--text-muted);font-size:11px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(state.myDisplayName||'')} · ${esc(ROLES[state.role].label)}</small>
     </div>
-    <div class="hd-avatars" onclick="goto('profile')" title="Mon profil">${team}${me}</div>
+    <img class="hd-logo" src="logo-mark.png" alt="Optepia">
   </div>`;
 }
 function renderNav(){
@@ -1735,7 +1736,7 @@ function renderProfile(){
 
   ${acc('prefs', '<span>⚙️ Affichage et aide</span>', `
     <button class="btn btn-secondary" style="margin-bottom:10px;" onclick="toggleTheme()">${document.documentElement.getAttribute('data-theme')==='light'?'🌙 Passer au thème sombre':'☀️ Passer au thème clair'}</button>
-    <a href="manuel-utilisation.pdf?v=6" target="_blank" rel="noopener" class="btn btn-secondary" style="display:block;text-align:center;text-decoration:none;">📖 Manuel d'utilisation</a>`)}
+    <a href="manuel-utilisation.pdf?v=7" target="_blank" rel="noopener" class="btn btn-secondary" style="display:block;text-align:center;text-decoration:none;">📖 Manuel d'utilisation</a>`)}
 
   ${acc('roles', '<span>ℹ️ Rôles et droits</span>', `
     <div class="card"><b style="font-size:13px;">Administrateur</b><p class="muted" style="font-size:13px;margin-top:4px;">Accès complet : matériel, membres, prêts, validations.</p></div>
