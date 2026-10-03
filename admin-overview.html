@@ -598,15 +598,17 @@ function renderMfa(){
 function renderTopbar(){
   return `
   <div class="topbar">
-    <div class="tb-brand">
+    <div class="tb-brand" style="cursor:pointer;" onclick="askGoApp()" role="button" aria-label="Aller sur l'application">
       <img src="logo-admin-mark.png" alt="">
       <div class="t"><h2>Optepia <span class="tag-admin">Admin</span></h2><small>Super-administrateur</small></div>
     </div>
     <div style="display:flex;gap:8px;">
-      <a class="btn b2 sm" href="index.html">Appli</a>
       <button class="btn b2 sm" onclick="doLogout()">Déconnexion</button>
     </div>
   </div>`;
+}
+function askGoApp(){
+  openModal({ title:'Aller sur l\'application ?', body:'<p>Tu vas quitter l\'espace administration pour ouvrir l\'application Optepia.</p>', confirmLabel:'Ouvrir l\'application', onConfirm:()=>{ location.href='index.html'; } });
 }
 function setView(v){ state.view=v; if(v==='log' && !state.adminLog) loadLog(); render(); window.scrollTo(0,0); }
 function renderNav(){
