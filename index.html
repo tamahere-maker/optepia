@@ -2404,6 +2404,14 @@ function applyScanned(data){
     const d=petzlFabDate(p.numero_serie);
     if(d){ equipDraft.date_fabrication=d; extra=' · fabrication '+fmtDate(d); }
   }
+  /* Petzl : produits non métalliques (textile/plastique) → durée de vie max. 10 ans à partir de la fabrication */
+  if(/petzl/i.test(marque) && equipDraft.date_fabrication && !equipDraft.date_fin_vie){
+    const fam=((document.getElementById('f-famille')||{}).value||equipDraft.famille||'').trim();
+    if(fam && !/m[ée]tall/i.test(fam)){
+      equipDraft.date_fin_vie=plusYears(equipDraft.date_fabrication,10);
+      extra+=' · fin de vie '+fmtDate(equipDraft.date_fin_vie);
+    }
+  }
   render();
   showToast('Numéro de série rempli : '+(p.numero_serie||'').slice(0,40)+extra);
 }
