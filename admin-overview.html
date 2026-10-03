@@ -758,7 +758,7 @@ function renderUnitsResults(units){
     const b = state.billing[u.id]; const bl = b && BILL[b.status];
     const a = state.unitAct[u.id]; const lb = latestBackup(u.id);
     const act = a && a.last_action_at ? 'activité '+ago(a.last_action_at) : 'aucune activité';
-    const bk = state.sqlMissing ? '' : (lb ? `sauvegarde ${ago(lb.created_at)}` : '<span style="color:var(--warn);">jamais sauvegardée</span>');
+    const bk = state.sqlMissing ? '' : (lb ? `sauvegarde du ${fmtDateTime(lb.created_at).replace(' ',' à ')} (${ago(lb.created_at)})` : '<span style="color:var(--warn);">jamais sauvegardée</span>');
     return `
     <div class="card tap unit-card ${state.sel.has(u.id)?'selected':''}" onclick="openUnit('${u.id}')">
       <div class="row">
@@ -860,7 +860,7 @@ function renderUnitDetail(){
   <div class="row" style="align-items:flex-start;margin-bottom:16px;">
     <div class="row" style="gap:12px;">
       ${u.avatar_url?`<img class="thumb" src="${imgSrc(u.avatar_url)}" style="width:56px;height:56px;" onerror="imgFallback(this)">`:''}
-      <div><h1 style="margin:0;">${esc(u.name)}</h1><p class="muted">Créée le ${fmtDate(u.created_at)}${owner?' · propriétaire : '+esc(owner.display_name):''}${storage?' · stockage : '+formatBytes(storage.total_bytes)+' ('+storage.file_count+' fichier(s))':''}${a&&a.last_action_at?' · dernière activité '+ago(a.last_action_at)+' ('+a.actions_30d+' action(s) sur 30 j)':''}</p></div>
+      <div><h1 style="margin:0;">${esc(u.name)}</h1><p class="muted">Créée le ${fmtDate(u.created_at)}${owner?' · propriétaire : '+esc(owner.display_name):''}${storage?' · stockage : '+formatBytes(storage.total_bytes)+' ('+storage.file_count+' fichier(s))':''}${a&&a.last_action_at?' · dernière activité '+ago(a.last_action_at)+' ('+a.actions_30d+' action(s) sur 30 j)':''}${(function(){const lb=latestBackup(u.id);return lb?' · dernière sauvegarde le '+fmtDateTime(lb.created_at).replace(' ',' à '):'';})()}</p></div>
     </div>
   </div>
   ${renderBillingCard(u)}
