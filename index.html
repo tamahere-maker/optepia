@@ -594,6 +594,21 @@ async function uploadImage(dataUrl, path){
   if(error) throw error;
   return path;
 }
+/* Fichiers du catalogue partagé : stockés une seule fois dans le bucket « catalogue », référencés par « catalogue:chemin » */
+const CAT_PREFIX = 'catalogue:';
+function isCatRef(v){ return typeof v==='string' && v.startsWith(CAT_PREFIX); }
+async function resolveCatRefs(refs){
+  const now = Date.now();
+  const need = [...new Set(refs)].filter(v=>!signedUrlCache[v] || signedUrlCache[v].expires < now + 5*60*1000);
+  if(!need.length) return;
+  try{
+    const paths = need.map(v=>v.slice(CAT_PREFIX.length));
+    for(let i=0;i<paths.length;i+=100){
+      const { data } = await sb.storage.from('catalogue').createSignedUrls(paths.slice(i,i+100), 3600);
+      (data||[]).forEach(d=>{ if(d.signedUrl) signedUrlCache[CAT_PREFIX+d.path] = { url:d.signedUrl, expires: now+3600*1000 }; });
+    }
+  }catch(e){ /* silencieux : imgFallback prendra le relais */ }
+}
 /* Anciennes données : certaines signatures sont stockées sous forme d'URL publique complète du bucket (devenu privé).
    On en extrait le chemin pour générer un lien signé. */
 function storagePathOf(v){
@@ -605,12 +620,15 @@ function isExternalLink(v){ return !!v && /^https?:\/\//.test(v) && !storagePath
 let signedUrlCache = {};
 async function resolveSignedUrls(paths){
   const byPath = {};   /* chemin réel -> valeurs stockées qui y mènent */
+  const catRefs = [];
   (paths||[]).forEach(v=>{
     if(!v || isExternalLink(v)) return;
+    if(isCatRef(v)){ catRefs.push(v); return; }
     const real = storagePathOf(v) || v;
     (byPath[real] = byPath[real] || []).push(v);
   });
   const now = Date.now();
+  await resolveCatRefs(catRefs);
   const need = Object.keys(byPath).filter(real=>byPath[real].some(v=>!signedUrlCache[v] || signedUrlCache[v].expires < now + 5*60*1000));
   if(need.length===0) return;
   try{
@@ -1604,6 +1622,7 @@ function renderAddEquip(){
     <div id="same-photo"></div>
     <div class="field"><label>Désignation</label><input id="f-designation" value="${esc(equipDraft.designation)}" oninput="refreshSamePhoto()" placeholder="Ex. Baudrier, corde, mousqueton…"></div>
     <div class="field"><label>Marque</label><input id="f-marque" value="${esc(equipDraft.marque)}" oninput="refreshSamePhoto()"></div>
+    <div id="cat-match"></div>
     <div class="row" style="gap:10px;align-items:flex-start;">
       <div class="field" style="flex:1;"><label>Famille</label><input id="f-famille" list="famille-list" value="${esc(equipDraft.famille)}" placeholder="Métallique, Textile…"></div>
       <div class="field" style="flex:1;"><label>Sous-famille</label><input id="f-sousFamille" list="sousfamille-list" value="${esc(equipDraft.sous_famille)}" placeholder="Mousqueton…"></div>
@@ -1777,7 +1796,7 @@ function renderProfile(){
 
   ${acc('prefs', '<span>⚙️ Affichage et aide</span>', `
     <button class="btn btn-secondary" style="margin-bottom:10px;" onclick="toggleTheme()">${document.documentElement.getAttribute('data-theme')==='light'?'🌙 Passer au thème sombre':'☀️ Passer au thème clair'}</button>
-    <a href="manuel-utilisation.pdf?v=7" target="_blank" rel="noopener" class="btn btn-secondary" style="display:block;text-align:center;text-decoration:none;">📖 Manuel d'utilisation</a>`)}
+    <a href="manuel-utilisation.pdf?v=8" target="_blank" rel="noopener" class="btn btn-secondary" style="display:block;text-align:center;text-decoration:none;">📖 Manuel d'utilisation</a>`)}
 
   ${acc('roles', '<span>ℹ️ Rôles et droits</span>', `
     <div class="card"><b style="font-size:13px;">Administrateur</b><p class="muted" style="font-size:13px;margin-top:4px;">Accès complet : matériel, membres, prêts, validations.</p></div>
@@ -2216,7 +2235,7 @@ function exportCsv(){
 function goto(v){ state.view=v; state.qrStatus=null; render(); }
 function setFilter(f){ state.filter=f; render(); }
 function openDetail(id){ state.detailId=id; state.view='detail'; render(); }
-function startAddEquip(){ newEquipDraft(); state.qrStatus=null; state.view='addEquip'; render(); }
+function startAddEquip(){ newEquipDraft(); state.qrStatus=null; _catP=null; loadCatalogOnce(); state.view='addEquip'; render(); }
 function editEquip(id){
   const e = state.equipment.find(x=>x.id===id);
   equipDraft = {designation:e.designation,marque:e.marque,numero_serie:e.numero_serie,identification:e.identification,date_fabrication:e.date_fabrication,date_premiere_utilisation:e.date_premiere_utilisation,date_fin_vie:e.date_fin_vie,famille:e.famille,sous_famille:e.sous_famille,fiche_technique_url:e.fiche_technique_url,photo:null,photo_url:e.photo_url,_editId:id};
@@ -2335,7 +2354,80 @@ function useSameFiche(id){
   syncEquipDraftFromDom(); equipDraft.fiche_technique_url = c.fiche_technique_url; render();
   showToast('Fiche technique reprise d\'un article identique');
 }
+/* ---- Catalogue partagé (géré par l'administrateur de la plateforme) ---- */
+let _catP = null;
+function _catN(s){ return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/œ/g,'o').replace(/æ/g,'a').replace(/[^a-z0-9]+/g,''); }
+function loadCatalogOnce(){
+  if(_catP) return _catP;
+  _catP = (async()=>{
+    try{
+      const { data, error } = await sb.from('equipment_catalog').select('id,marque,designation,famille,sous_famille,photo_path,fiche_path,fiche_url,duree_vie_ans').order('marque').order('designation').limit(5000);
+      if(error) throw error;
+      state.catalog = (data||[]).map(c=>Object.assign(c,{_nm:_catN(c.marque),_nd:_catN(c.designation)}));
+    }catch(e){ state.catalog = []; _catP = null; }
+    refreshCatalogMatch();
+  })();
+  return _catP;
+}
+function catalogMatches(des, mar){
+  const nd=_catN(des), nm=_catN(mar), cat=state.catalog||[];
+  if(nd.length<2) return {exact:null,list:[]};
+  let exact = nm ? cat.find(c=>c._nm===nm && c._nd===nd) : null;
+  if(!exact && !nm){ const u=cat.filter(c=>c._nd===nd); if(u.length===1) exact=u[0]; }
+  const list = cat.filter(c=>c!==exact && (!nm || c._nm.includes(nm) || nm.includes(c._nm)) && (c._nd.includes(nd) || nd.includes(c._nd)))
+    .sort((a,b)=>(b._nd.startsWith(nd)?1:0)-(a._nd.startsWith(nd)?1:0)).slice(0,5);
+  return {exact,list};
+}
+function catSummary(c){
+  const bits=[]; if(c.famille) bits.push(c.famille+(c.sous_famille?' › '+c.sous_famille:'')); if(c.photo_path) bits.push('photo'); if(c.fiche_path||c.fiche_url) bits.push('fiche technique');
+  return bits.join(' · ');
+}
+function refreshCatalogMatch(){
+  const box = document.getElementById('cat-match'); if(!box) return;
+  if(equipDraft._editId){ box.innerHTML=''; return; }
+  if(!state.catalog){ loadCatalogOnce(); return; }
+  if(!state.catalog.length){ box.innerHTML=''; return; }
+  const d=(document.getElementById('f-designation')||{}).value, m=(document.getElementById('f-marque')||{}).value;
+  const {exact,list} = catalogMatches(d,m);
+  if(exact && equipDraft._catId===exact.id){ box.innerHTML = `<div class="qr-status ok" style="margin:-4px 0 14px;">✓ Données du catalogue appliquées</div>`; return; }
+  let html='';
+  if(exact) html += `<button type="button" class="btn btn-primary" style="margin:-4px 0 12px;flex-direction:column;gap:2px;text-align:left;align-items:flex-start;" onclick="useCatalog('${exact.id}')"><span>📚 Trouvé dans le catalogue — Utiliser</span><span style="font-size:12px;font-weight:500;opacity:.85;">${esc(exact.marque)} · ${esc(exact.designation)}${catSummary(exact)?' — '+esc(catSummary(exact)):''}</span></button>`;
+  if(list.length) html += `<div class="muted" style="font-size:12px;margin:-2px 0 6px;">${exact?'Autres références proches':'Suggestions du catalogue'}</div>`+
+    list.map(c=>`<button type="button" class="btn btn-secondary" style="margin:0 0 6px;justify-content:flex-start;text-align:left;gap:8px;" onclick="useCatalog('${c.id}')">📚 <span style="min-width:0;"><b>${esc(c.designation)}</b> <span class="muted" style="font-size:12px;">${esc(c.marque)}</span></span></button>`).join('');
+  box.innerHTML = html ? `<div style="margin-bottom:12px;">${html}</div>` : '';
+}
+async function useCatalog(id){
+  const c=(state.catalog||[]).find(x=>x.id===id); if(!c) return;
+  syncEquipDraftFromDom();
+  equipDraft.designation=c.designation; equipDraft.marque=c.marque;
+  if(c.famille) equipDraft.famille=c.famille;
+  if(c.sous_famille) equipDraft.sous_famille=c.sous_famille;
+  if(c.photo_path && !equipDraft.photo && !equipDraft.photo_url) equipDraft.photo_url = CAT_PREFIX+c.photo_path;
+  if(!equipDraft.fiche_technique_url){
+    if(c.fiche_path) equipDraft.fiche_technique_url = CAT_PREFIX+c.fiche_path;
+    else if(c.fiche_url) equipDraft.fiche_technique_url = c.fiche_url;
+  }
+  equipDraft._catId=c.id; equipDraft._catDuree=c.duree_vie_ans||null;
+  autoFinVie();
+  await resolveSignedUrls([equipDraft.photo_url, equipDraft.fiche_technique_url]);
+  render();
+  showToast('Données du catalogue appliquées');
+}
+/* Fin de vie proposée : durée du catalogue, sinon règle Petzl (10 ans hors métal), à partir de la date de fabrication */
+function autoFinVie(){
+  if(!equipDraft.date_fabrication || equipDraft.date_fin_vie) return '';
+  let n = equipDraft._catDuree || 0;
+  if(!n){
+    const marque=((document.getElementById('f-marque')||{}).value||equipDraft.marque||'');
+    const fam=((document.getElementById('f-famille')||{}).value||equipDraft.famille||'').trim();
+    if(/petzl/i.test(marque) && fam && !/m[ée]tall/i.test(fam)) n = 10;
+  }
+  if(!n) return '';
+  equipDraft.date_fin_vie = plusYears(equipDraft.date_fabrication, n);
+  return ' · fin de vie '+fmtDate(equipDraft.date_fin_vie);
+}
 function refreshSamePhoto(){
+  refreshCatalogMatch();
   refreshSameFiche();
   const box = document.getElementById('same-photo'); if(!box) return;
   const d = _norm((document.getElementById('f-designation')||{}).value), m = _norm((document.getElementById('f-marque')||{}).value);
@@ -2377,7 +2469,7 @@ async function applySharedFile(id, field, label, logText){
     if(error) throw error;
     /* supprime uniquement les fichiers que plus aucune fiche n'utilise */
     const stillUsed = new Set(state.equipment.filter(x=>!ids.includes(x.id)).flatMap(x=>[x.photo_url, x.fiche_technique_url]));
-    const removable = old.filter(pth=>!stillUsed.has(pth) && !isExternalLink(pth)).map(pth=>storagePathOf(pth)||pth);
+    const removable = old.filter(pth=>!stillUsed.has(pth) && !isExternalLink(pth) && !isCatRef(pth)).map(pth=>storagePathOf(pth)||pth);
     let removed = 0;
     if(removable.length){ const r = await sb.storage.from(BUCKET).remove(removable); if(!r.error) removed = removable.length; }
     await logAction(logText, e.designation);
@@ -2404,14 +2496,7 @@ function applyScanned(data){
     const d=petzlFabDate(p.numero_serie);
     if(d){ equipDraft.date_fabrication=d; extra=' · fabrication '+fmtDate(d); }
   }
-  /* Petzl : produits non métalliques (textile/plastique) → durée de vie max. 10 ans à partir de la fabrication */
-  if(/petzl/i.test(marque) && equipDraft.date_fabrication && !equipDraft.date_fin_vie){
-    const fam=((document.getElementById('f-famille')||{}).value||equipDraft.famille||'').trim();
-    if(fam && !/m[ée]tall/i.test(fam)){
-      equipDraft.date_fin_vie=plusYears(equipDraft.date_fabrication,10);
-      extra+=' · fin de vie '+fmtDate(equipDraft.date_fin_vie);
-    }
-  }
+  extra += autoFinVie();
   render();
   showToast('Numéro de série rempli : '+(p.numero_serie||'').slice(0,40)+extra);
 }

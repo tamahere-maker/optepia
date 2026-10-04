@@ -139,15 +139,24 @@ function freshState(){
     units:[], allMembers:[], allEquipment:[], platformStats:null, storageByUnit:{}, userEmails:{},
     billing:{}, unitAct:{}, userAct:[], backups:[], adminLog:null, sqlMissing:false, sqlMsg:'',
     sel:new Set(), sort:'name', filter:'all', unitDetailId:null, unitTab:'materiel', search:'',
-    busy:false, error:null, modal:null, modalTyped:'', progress:null };
+    busy:false, error:null, modal:null, modalTyped:'', progress:null,
+    catalog:[], catLoaded:false, catMissing:false, catSearch:'', catLimit:100 };
 }
 let state = freshState();
 
 function esc(s){ return (s||'').toString().replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 let signedUrlCache = {};
 async function resolveSignedUrls(paths){
-  const uniq = [...new Set((paths||[]).filter(Boolean))];
+  const all = [...new Set((paths||[]).filter(Boolean))];
+  const uniq = all.filter(p=>!p.startsWith('catalogue:'));
   const now = Date.now();
+  const cats = all.filter(p=>p.startsWith('catalogue:') && (!signedUrlCache[p] || signedUrlCache[p].expires < now + 5*60*1000));
+  if(cats.length){
+    try{
+      const { data } = await sb.storage.from('catalogue').createSignedUrls(cats.map(p=>p.slice(10)), 3600);
+      (data||[]).forEach(d=>{ if(d.signedUrl) signedUrlCache['catalogue:'+d.path] = { url:d.signedUrl, expires: now + 3600*1000 }; });
+    }catch(e){}
+  }
   const need = uniq.filter(p=>!signedUrlCache[p] || signedUrlCache[p].expires < now + 5*60*1000);
   if(need.length===0) return;
   try{
@@ -614,11 +623,12 @@ function setView(v){ state.view=v; if(v==='log' && !state.adminLog) loadLog(); r
 function renderNav(){
   const cur = state.view==='unitDetail' ? 'units' : state.view;
   const t = (k,l)=>`<button class="tab ${cur===k?'active':''}" onclick="setView('${k}')">${l}</button>`;
-  return `<div class="navwrap"><div class="tabs" style="margin:0;">${t('units','Unités')}${t('backups','Sauvegardes')}${t('log','Journal admin')}</div></div>`;
+  return `<div class="navwrap"><div class="tabs" style="margin:0;">${t('units','Unités')}${t('backups','Sauvegardes')}${t('catalog','Catalogue')}${t('log','Journal admin')}</div></div>`;
 }
 function renderView(){
   if(state.view==='unitDetail') return renderUnitDetail();
   if(state.view==='backups') return renderBackupsView();
+  if(state.view==='catalog') return renderCatalogView();
   if(state.view==='log') return renderLogView();
   return renderUnitsList();
 }
@@ -1049,6 +1059,313 @@ function renderLogView(){
       <p class="muted" style="font-size:12px;margin-top:2px;">${esc(j.target||'')}${j.admin_email?' · '+esc(j.admin_email):''}</p>
     </div>`).join('')}</div>`;
 }
+
+/* =====================================================================
+   Catalogue de matériel (super-admin) : marque + désignation → fiche, photo, famille
+   ===================================================================== */
+const CAT_BUCKET = 'catalogue';
+let catUrlCache = {};
+function catNorm(s){ return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/œ/g,'o').replace(/æ/g,'a').replace(/[^a-z0-9]+/g,''); }
+async function resolveCatUrls(paths){
+  const now=Date.now();
+  const need=[...new Set((paths||[]).filter(Boolean))].filter(p=>!catUrlCache[p]||catUrlCache[p].expires<now+300000);
+  if(!need.length) return;
+  try{
+    for(let i=0;i<need.length;i+=100){
+      const { data } = await sb.storage.from(CAT_BUCKET).createSignedUrls(need.slice(i,i+100), 3600);
+      (data||[]).forEach(d=>{ if(d.signedUrl) catUrlCache[d.path]={url:d.signedUrl,expires:now+3600000}; });
+    }
+  }catch(e){}
+}
+function catUrl(p){ const c=p&&catUrlCache[p]; return c?c.url:''; }
+
+let catLoading=false;
+async function loadCatalog(){
+  if(catLoading) return; catLoading=true;
+  const { data, error } = await sb.from('equipment_catalog').select('*').order('marque').order('designation').limit(5000);
+  if(error){
+    state.catMissing = /equipment_catalog|relation|schema cache|does not exist|42P01/i.test(error.message||error.code||'');
+    state.catalog = []; state.catLoaded = true;
+    if(!state.catMissing) state.error = error.message;
+  } else { state.catalog = data||[]; state.catMissing=false; state.catLoaded=true; }
+  await resolveCatUrls(state.catalog.map(c=>c.photo_path));
+  catLoading=false;
+  if(state.view==='catalog') render();
+}
+function visibleCatalog(){
+  const q = catNorm(state.catSearch||'');
+  return state.catalog.filter(c=>!q || (c.marque_norm||catNorm(c.marque)).includes(q) || (c.designation_norm||catNorm(c.designation)).includes(q) || catNorm((c.marque||'')+(c.designation||'')).includes(q));
+}
+function renderCatRow(c){
+  const img = catUrl(c.photo_path);
+  return `<div class="item-row" onclick="openCatEditor('${c.id}')" style="cursor:pointer;">
+    <div class="row" style="gap:12px;">
+      <div class="row" style="gap:12px;min-width:0;">
+        ${img?`<img class="thumb" src="${esc(img)}" style="object-fit:contain;" onerror="this.style.visibility='hidden'">`:`<div class="thumb"></div>`}
+        <div style="min-width:0;">
+          <div style="font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c.designation)}</div>
+          <div class="muted" style="font-size:12px;">${esc(c.marque)}${c.famille?' · '+esc(c.famille):''}${c.sous_famille?' › '+esc(c.sous_famille):''}</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0;">${c.fiche_path||c.fiche_url?'<span class="badge badge-ok">Fiche</span>':'<span class="badge badge-ro">Sans fiche</span>'}${c.photo_path?'':'<span class="badge badge-warn">Sans photo</span>'}</div>
+    </div></div>`;
+}
+function renderCatalogResults(){
+  const list = visibleCatalog();
+  if(!state.catalog.length) return `<div class="empty">Le catalogue est vide. Ajoute une première référence ou importe un fichier CSV.</div>`;
+  if(!list.length) return `<div class="empty">Aucune référence ne correspond.</div>`;
+  const shown = list.slice(0, state.catLimit||100);
+  return `<div class="card">${shown.map(renderCatRow).join('')}</div>`+
+    (list.length>shown.length?`<button class="btn b2" onclick="state.catLimit=(state.catLimit||100)+200;render();">Afficher plus (${list.length-shown.length} restantes)</button>`:'');
+}
+function renderCatalogView(){
+  if(!state.catLoaded){ loadCatalog(); return `<div class="splash">Chargement du catalogue…</div>`; }
+  if(state.catMissing) return `<h1 style="margin-bottom:12px;">Catalogue</h1><div class="card" style="border-color:var(--warn);"><h3 style="color:var(--warn);">Installation requise</h3><p class="muted" style="font-size:13px;margin-top:6px;">Exécute une fois le fichier <b>Optepia-catalogue.sql</b> dans Supabase › SQL Editor, puis recharge cette page.</p></div>`;
+  const nbFiche = state.catalog.filter(c=>c.fiche_path||c.fiche_url).length, nbPhoto = state.catalog.filter(c=>c.photo_path).length;
+  return `
+  <h1 style="margin-bottom:4px;">Catalogue</h1>
+  <p class="muted" style="margin-bottom:14px;">${state.catalog.length} référence(s) · ${nbFiche} avec fiche · ${nbPhoto} avec photo. Proposé automatiquement quand une unité ajoute un matériel de même marque et désignation.</p>
+  <div class="row" style="gap:8px;margin-bottom:12px;flex-wrap:wrap;justify-content:flex-start;">
+    <button class="btn btn-primary sm" onclick="openCatEditor(null)">+ Ajouter</button>
+    <button class="btn b2 sm" onclick="catPickCsv()">Importer CSV</button>
+    <button class="btn b2 sm" onclick="catPickFiles()">Associer des fichiers</button>
+    <button class="btn b2 sm" onclick="catDownloadTemplate()">Modèle CSV</button>
+    <button class="btn b2 sm" onclick="catExportCsv()">Exporter</button>
+  </div>
+  <div class="search"><input placeholder="Rechercher une marque ou une désignation…" value="${esc(state.catSearch||'')}" oninput="onCatSearch(this.value)"></div>
+  <div id="cat-results">${renderCatalogResults()}</div>`;
+}
+function onCatSearch(v){ state.catSearch=v; state.catLimit=100; document.getElementById('cat-results').innerHTML = renderCatalogResults(); }
+
+/* ----- fichiers : photo réduite en JPEG ----- */
+function fileToJpegBlob(file, maxDim){
+  return new Promise((resolve,reject)=>{
+    const url = URL.createObjectURL(file); const img = new Image();
+    img.onload = ()=>{
+      let w=img.width,h=img.height; const k=Math.min(1,(maxDim||900)/Math.max(w,h)); w=Math.round(w*k); h=Math.round(h*k);
+      const c=document.createElement('canvas'); c.width=w; c.height=h; const x=c.getContext('2d');
+      x.fillStyle='#fff'; x.fillRect(0,0,w,h); x.drawImage(img,0,0,w,h);
+      c.toBlob(b=>{ URL.revokeObjectURL(url); b?resolve(b):reject(new Error('Image illisible')); },'image/jpeg',0.82);
+    };
+    img.onerror=()=>{ URL.revokeObjectURL(url); reject(new Error('Image illisible : '+file.name)); };
+    img.src=url;
+  });
+}
+function newId(){ return (crypto.randomUUID?crypto.randomUUID():'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return (c==='x'?r:(r&3|8)).toString(16);})); }
+async function catUploadPhoto(id, file){
+  const blob = await fileToJpegBlob(file, 900); const path = `photos/${id}.jpg`;
+  const { error } = await sb.storage.from(CAT_BUCKET).upload(path, blob, {upsert:true, contentType:'image/jpeg'});
+  if(error) throw error; return path;
+}
+async function catUploadFiche(id, file){
+  if(file.size > 15*1024*1024) throw new Error('PDF trop lourd (15 Mo max) : '+file.name);
+  const path = `fiches/${id}.pdf`;
+  const { error } = await sb.storage.from(CAT_BUCKET).upload(path, file, {upsert:true, contentType:'application/pdf'});
+  if(error) throw error; return path;
+}
+
+/* ----- éditeur d'une référence ----- */
+function distinctCat(k){ return [...new Set(state.catalog.map(c=>c[k]).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'fr')); }
+function openCatEditor(id){
+  const c = id ? state.catalog.find(x=>x.id===id) : null;
+  const ov = document.createElement('div'); ov.className='ov'; ov.id='cat-ov';
+  const img = c && catUrl(c.photo_path);
+  ov.innerHTML = `<div class="dlg" style="max-width:460px;">
+    <h2 style="margin-bottom:12px;">${c?'Modifier la référence':'Nouvelle référence'}</h2>
+    <div class="field"><label>Marque *</label><input id="ce-marque" list="ce-marques" value="${esc(c&&c.marque)}" autocomplete="off"></div>
+    <datalist id="ce-marques">${distinctCat('marque').map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
+    <div class="field"><label>Désignation *</label><input id="ce-designation" value="${esc(c&&c.designation)}" autocomplete="off"></div>
+    <div class="row" style="gap:10px;align-items:flex-start;">
+      <div class="field" style="flex:1;"><label>Famille</label><input id="ce-famille" list="ce-familles" value="${esc(c&&c.famille)}" placeholder="Métallique, Textile…"></div>
+      <div class="field" style="flex:1;"><label>Sous-famille</label><input id="ce-sous" list="ce-sous-l" value="${esc(c&&c.sous_famille)}"></div>
+    </div>
+    <datalist id="ce-familles">${[...new Set(['Métallique','Textile',...distinctCat('famille')])].map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
+    <datalist id="ce-sous-l">${distinctCat('sous_famille').map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
+    <div class="field"><label>Durée de vie maximale (années, optionnel)</label><input id="ce-duree" type="number" min="1" max="60" value="${c&&c.duree_vie_ans||''}" placeholder="10"></div>
+    <div class="field"><label>Photo</label>
+      ${img?`<img src="${esc(img)}" style="max-height:110px;max-width:100%;object-fit:contain;border-radius:10px;border:1px solid var(--border);background:#fff;display:block;margin-bottom:8px;">`:''}
+      <input id="ce-photo" type="file" accept="image/*">
+      <div class="muted" style="font-size:11px;margin-top:4px;">${c&&c.photo_path?'Choisir un fichier remplace la photo actuelle.':'Réduite automatiquement (900 px).'}</div></div>
+    <div class="field"><label>Fiche technique — PDF</label>
+      <input id="ce-fiche" type="file" accept="application/pdf">
+      <div class="muted" style="font-size:11px;margin-top:4px;">${c&&c.fiche_path?'Un PDF est déjà enregistré ; en choisir un autre le remplace.':'15 Mo maximum.'}</div></div>
+    <div class="field"><label>… ou lien officiel du fabricant</label><input id="ce-url" value="${esc(c&&c.fiche_url)}" placeholder="https://…"></div>
+    <div id="ce-err" style="color:var(--danger);font-size:13px;min-height:18px;margin-bottom:6px;"></div>
+    <div class="dlg-act">
+      ${c?`<button class="btn b2" style="color:var(--danger);" onclick="catAskDelete('${c.id}')">Supprimer</button>`:''}
+      <button class="btn b2" onclick="closeCatEditor()">Annuler</button>
+      <button id="ce-save" class="btn btn-primary" onclick="saveCat(${c?`'${c.id}'`:'null'})">Enregistrer</button>
+    </div></div>`;
+  document.body.appendChild(ov);
+}
+function closeCatEditor(){ const o=document.getElementById('cat-ov'); if(o) o.remove(); }
+async function saveCat(id){
+  const g=i=>(document.getElementById(i).value||'').trim();
+  const err=document.getElementById('ce-err'), btn=document.getElementById('ce-save');
+  const marque=g('ce-marque'), designation=g('ce-designation');
+  if(!marque||!designation){ err.textContent='La marque et la désignation sont obligatoires.'; return; }
+  let url=g('ce-url'); if(url && !/^https?:\/\//i.test(url)){ err.textContent='Le lien doit commencer par https://'; return; }
+  const duree = g('ce-duree') ? parseInt(g('ce-duree'),10) : null;
+  if(duree!==null && (isNaN(duree)||duree<1||duree>60)){ err.textContent='Durée de vie : entre 1 et 60 ans.'; return; }
+  btn.disabled=true; btn.textContent='Enregistrement…'; err.textContent='';
+  try{
+    const old = id ? state.catalog.find(x=>x.id===id) : null;
+    const rid = id || newId();
+    const row = { marque, designation, famille:g('ce-famille')||null, sous_famille:g('ce-sous')||null, duree_vie_ans:duree, fiche_url:url||null };
+    const pf=document.getElementById('ce-photo').files[0], ff=document.getElementById('ce-fiche').files[0];
+    if(pf) row.photo_path = await catUploadPhoto(rid, pf);
+    if(ff){ row.fiche_path = await catUploadFiche(rid, ff); }
+    let res;
+    if(old) res = await sb.from('equipment_catalog').update(row).eq('id', rid);
+    else { row.id = rid; row.created_by = state.session.user.id; res = await sb.from('equipment_catalog').insert(row); }
+    if(res.error){
+      if(/duplicate|unique|23505/i.test(res.error.message||res.error.code)) throw new Error('Cette marque + désignation existe déjà dans le catalogue.');
+      throw res.error;
+    }
+    logAdmin(old?'Catalogue : référence modifiée':'Catalogue : référence ajoutée', marque+' — '+designation);
+    closeCatEditor(); await loadCatalog();
+  }catch(e){ err.textContent = e.message||String(e); btn.disabled=false; btn.textContent='Enregistrer'; }
+}
+function catAskDelete(id){
+  const c=state.catalog.find(x=>x.id===id); if(!c) return;
+  closeCatEditor();
+  openModal({ title:'Supprimer cette référence ?', danger:true, confirmLabel:'Supprimer',
+    body:`<p><b>${esc(c.marque)} — ${esc(c.designation)}</b></p><p class="muted" style="font-size:12px;">Les matériels déjà créés dans les unités ne sont pas touchés, mais ceux qui utilisaient la fiche ou la photo du catalogue perdront ce fichier. Supprime plutôt la référence quand elle est une erreur.</p>`,
+    onConfirm:()=>runOp('Suppression…', async ()=>{
+      const files=[c.photo_path,c.fiche_path].filter(Boolean);
+      const { error } = await sb.from('equipment_catalog').delete().eq('id',id);
+      if(error) throw error;
+      if(files.length) await sb.storage.from(CAT_BUCKET).remove(files);
+      logAdmin('Catalogue : référence supprimée', c.marque+' — '+c.designation);
+      await loadCatalog();
+    }) });
+}
+
+/* ----- CSV ----- */
+function parseCsv(text){
+  text = String(text||'').replace(/^﻿/,'');
+  const first = text.split(/\r?\n/)[0]||'';
+  const delim = (first.split(';').length>first.split(',').length)?';':(first.includes('\t')?'\t':',');
+  const rows=[]; let row=[], cur='', q=false;
+  for(let i=0;i<text.length;i++){
+    const ch=text[i];
+    if(q){ if(ch==='"'){ if(text[i+1]==='"'){ cur+='"'; i++; } else q=false; } else cur+=ch; }
+    else if(ch==='"') q=true;
+    else if(ch===delim){ row.push(cur); cur=''; }
+    else if(ch==='\n'||ch==='\r'){ if(ch==='\r'&&text[i+1]==='\n') i++; row.push(cur); cur=''; if(row.some(v=>v.trim()!=='')) rows.push(row); row=[]; }
+    else cur+=ch;
+  }
+  row.push(cur); if(row.some(v=>v.trim()!=='')) rows.push(row);
+  return rows;
+}
+const CSV_COLS = ['marque','designation','famille','sous_famille','duree_vie_ans','fiche_url'];
+function csvKey(h){
+  const k=catNorm(h);
+  if(k==='marque'||k==='brand') return 'marque';
+  if(k==='designation'||k==='nom'||k==='produit'||k==='modele') return 'designation';
+  if(k==='famille') return 'famille';
+  if(k==='sousfamille') return 'sous_famille';
+  if(k==='dureedevieans'||k==='dureevieans'||k==='dureedevie'||k==='dureevie'||k==='duree'||k==='dureedevieannees') return 'duree_vie_ans';
+  if(k==='ficheurl'||k==='fiche'||k==='lien'||k==='lienfiche'||k==='url'||k==='fichetechnique') return 'fiche_url';
+  return null;
+}
+function csvCell(v){ v=(v==null?'':String(v)); return /[";\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
+function catDownloadTemplate(){
+  const lines=[CSV_COLS.join(';'),
+    ['Petzl',"Am'D Auto",'Métallique','Connecteur','','https://www.petzl.com/…'].map(csvCell).join(';'),
+    ['Petzl','Grillon','Textile','Longe','10',''].map(csvCell).join(';')];
+  saveBlob(new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}),'modele-catalogue.csv');
+}
+function catExportCsv(){
+  const lines=[CSV_COLS.join(';')].concat(state.catalog.map(c=>CSV_COLS.map(k=>csvCell(c[k])).join(';')));
+  saveBlob(new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}),'catalogue-optepia-'+new Date().toISOString().slice(0,10)+'.csv');
+}
+function catPickCsv(){
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='.csv,text/csv,text/plain'; inp.style.display='none'; document.body.appendChild(inp);
+  inp.onchange=async()=>{ const f=inp.files[0]; inp.remove(); if(!f) return; catPrepareImport(await f.text()); };
+  inp.click();
+}
+let catPending = null;
+function catPrepareImport(text){
+  const rows=parseCsv(text);
+  if(rows.length<2){ openInfo('Fichier vide','<p>Aucune ligne de données trouvée. Utilise le « Modèle CSV ».</p>'); return; }
+  const head=rows[0].map(csvKey);
+  if(!head.includes('marque')||!head.includes('designation')){ openInfo('Colonnes manquantes','<p>Le fichier doit avoir au moins les colonnes <b>marque</b> et <b>designation</b>. Utilise le « Modèle CSV ».</p>'); return; }
+  const byKey=new Map(state.catalog.map(c=>[catNorm(c.marque)+'|'+catNorm(c.designation),c]));
+  const seen=new Set(); const add=[], upd=[]; let skipped=0, dupInFile=0;
+  rows.slice(1).forEach(r=>{
+    const o={}; head.forEach((k,i)=>{ if(k) o[k]=(r[i]||'').trim(); });
+    if(!o.marque||!o.designation){ skipped++; return; }
+    const key=catNorm(o.marque)+'|'+catNorm(o.designation);
+    if(seen.has(key)){ dupInFile++; return; } seen.add(key);
+    if(o.duree_vie_ans){ const n=parseInt(o.duree_vie_ans,10); o.duree_vie_ans=(n>=1&&n<=60)?n:null; } else o.duree_vie_ans=null;
+    if(o.fiche_url && !/^https?:\/\//i.test(o.fiche_url)) o.fiche_url='';
+    const ex=byKey.get(key);
+    if(ex){ const patch={}; ['famille','sous_famille','duree_vie_ans','fiche_url'].forEach(k=>{ if(o[k]!==undefined && o[k]!==''&&o[k]!==null) patch[k]=o[k]; }); if(Object.keys(patch).length) upd.push({id:ex.id,patch}); }
+    else add.push(o);
+  });
+  catPending={add,upd};
+  openModal({ title:'Importer ce fichier ?', confirmLabel:'Importer',
+    body:`<ul class="dl"><li><b>${add.length}</b> nouvelle(s) référence(s)</li><li><b>${upd.length}</b> référence(s) existante(s) complétée(s) (seules les cases remplies sont écrites)</li>${skipped?`<li>${skipped} ligne(s) ignorée(s) (marque ou désignation vide)</li>`:''}${dupInFile?`<li>${dupInFile} doublon(s) dans le fichier ignoré(s)</li>`:''}</ul>`,
+    onConfirm:()=>runOp('Import en cours…', async ()=>{
+      const { add, upd } = catPending; let nAdd=0, nUpd=0, errs=[];
+      for(let i=0;i<add.length;i+=200){
+        const chunk=add.slice(i,i+200).map(o=>{ const r={marque:o.marque,designation:o.designation,created_by:state.session.user.id};
+          ['famille','sous_famille','duree_vie_ans','fiche_url'].forEach(k=>{ r[k]=(o[k]===''||o[k]===undefined)?null:o[k]; }); return r; });
+        const { error } = await sb.from('equipment_catalog').insert(chunk);
+        if(error) errs.push(error.message); else nAdd+=chunk.length;
+      }
+      for(let i=0;i<upd.length;i+=10){
+        const res=await Promise.all(upd.slice(i,i+10).map(u=>sb.from('equipment_catalog').update(u.patch).eq('id',u.id)));
+        res.forEach(r=>{ if(r.error) errs.push(r.error.message); else nUpd++; });
+      }
+      logAdmin('Catalogue : import CSV', nAdd+' ajoutées, '+nUpd+' mises à jour');
+      await loadCatalog();
+      return { title:'Import terminé', body:`<p>${nAdd} ajoutée(s), ${nUpd} mise(s) à jour.</p>${errs.length?`<p style="color:var(--danger);font-size:12px;">${errs.length} erreur(s) : ${esc(errs[0])}</p>`:''}<p class="muted" style="font-size:12px;">Ajoute ensuite les photos et PDF avec « Associer des fichiers ».</p>` };
+    }) });
+}
+
+/* ----- fichiers en lot : « Marque - Désignation.pdf / .jpg » ----- */
+function catPickFiles(){
+  const inp=document.createElement('input'); inp.type='file'; inp.multiple=true; inp.accept='image/*,application/pdf,.pdf'; inp.style.display='none'; document.body.appendChild(inp);
+  inp.onchange=()=>{ const fs=[...inp.files]; inp.remove(); if(fs.length) catPrepareFiles(fs); };
+  inp.click();
+}
+function catMatchFile(f){
+  const base=f.name.replace(/\.[^.]+$/,'');
+  const nb=catNorm(base);
+  let m=state.catalog.filter(c=>catNorm(c.marque+c.designation)===nb);
+  if(m.length===1) return m[0];
+  /* nom de fichier = désignation seule, si elle est unique dans le catalogue */
+  m=state.catalog.filter(c=>catNorm(c.designation)===nb);
+  return m.length===1?m[0]:null;
+}
+function catPrepareFiles(files){
+  const ok=[], ko=[];
+  files.forEach(f=>{
+    const isPdf=/pdf$/i.test(f.type)||/\.pdf$/i.test(f.name), isImg=/^image\//.test(f.type);
+    if(!isPdf&&!isImg){ ko.push(f.name+' (type non pris en charge)'); return; }
+    const c=catMatchFile(f); if(c) ok.push({f,c,kind:isPdf?'fiche':'photo'}); else ko.push(f.name+' (aucune référence correspondante)');
+  });
+  catPendingFiles=ok;
+  openModal({ title:'Associer ces fichiers ?', confirmLabel: ok.length?'Associer '+ok.length+' fichier(s)':'OK', noConfirm:!ok.length,
+    body:`<p><b>${ok.length}</b> fichier(s) reconnu(s), <b>${ko.length}</b> non reconnu(s).</p><p class="muted" style="font-size:12px;">Un fichier est associé quand son nom est « Marque Désignation » (ex. <i>Petzl Am'D Auto.pdf</i>). Les accents, majuscules et tirets sont ignorés. Un PDF devient la fiche, une image devient la photo.</p>${ko.length?`<details><summary class="muted" style="font-size:12px;">Non reconnus</summary><ul class="dl" style="font-size:12px;">${ko.slice(0,60).map(n=>`<li>${esc(n)}</li>`).join('')}${ko.length>60?'<li>…</li>':''}</ul></details>`:''}`,
+    onConfirm:()=>runOp('Envoi des fichiers…', async ()=>{
+      let done=0, errs=[];
+      for(const it of catPendingFiles){
+        try{
+          const patch = it.kind==='fiche' ? { fiche_path: await catUploadFiche(it.c.id, it.f) } : { photo_path: await catUploadPhoto(it.c.id, it.f) };
+          const { error } = await sb.from('equipment_catalog').update(patch).eq('id',it.c.id);
+          if(error) throw error; done++;
+          setProgress(`Envoi des fichiers… ${done}/${catPendingFiles.length}`);
+        }catch(e){ errs.push(it.f.name+' : '+(e.message||e)); }
+      }
+      logAdmin('Catalogue : fichiers associés', done+' fichier(s)');
+      await loadCatalog();
+      return { title:'Terminé', body:`<p>${done} fichier(s) associé(s).</p>${errs.length?`<p style="color:var(--danger);font-size:12px;">${errs.length} erreur(s) :</p><ul class="dl" style="font-size:12px;">${errs.slice(0,10).map(e=>`<li>${esc(e)}</li>`).join('')}</ul>`:''}` };
+    }) });
+}
+let catPendingFiles = [];
 
 init();
 </script>
