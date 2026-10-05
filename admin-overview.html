@@ -74,8 +74,9 @@
   a.btn{text-decoration:none;}
   .btn:disabled{opacity:.45;}
   .navwrap{position:sticky;top:57px;z-index:9;background:rgba(11,16,20,.92);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);padding:8px 16px;border-bottom:1px solid var(--border);}
-  .navwrap .tabs{max-width:728px;margin:0 auto;}
-  .navwrap .tab{flex:1;text-align:center;}
+  .navwrap .tabs{max-width:728px;margin:0 auto;overflow:visible;gap:4px;}
+  .navwrap .tab{flex:1 1 0;min-width:0;text-align:center;padding:9px 4px;font-size:12px;line-height:1.15;display:flex;align-items:center;justify-content:center;}
+  @media(max-width:420px){.navwrap{padding:8px 10px;}.navwrap .tab{font-size:11px;}}
   .sel{background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:8px 10px;font-size:13px;font-family:var(--font-body);}
   .linkbtn{background:none;color:var(--accent);font-size:12px;font-weight:600;padding:4px 0;}
   .chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:6px;}
@@ -623,7 +624,7 @@ function setView(v){ state.view=v; if(v==='log' && !state.adminLog) loadLog(); r
 function renderNav(){
   const cur = state.view==='unitDetail' ? 'units' : state.view;
   const t = (k,l)=>`<button class="tab ${cur===k?'active':''}" onclick="setView('${k}')">${l}</button>`;
-  return `<div class="navwrap"><div class="tabs" style="margin:0;">${t('units','Unités')}${t('backups','Sauvegardes')}${t('catalog','Catalogue')}${t('log','Journal admin')}</div></div>`;
+  return `<div class="navwrap"><div class="tabs">${t('units','Unités')}${t('backups','Sauvegardes')}${t('catalog','Catalogue')}${t('log','Journal admin')}</div></div>`;
 }
 function renderView(){
   if(state.view==='unitDetail') return renderUnitDetail();
