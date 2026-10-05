@@ -1117,7 +1117,7 @@ function pickDatasheet(){ document.getElementById('pdfInput').click(); }
 const EQUIP_FIELD_MAP = {
   'f-designation':'designation','f-marque':'marque','f-numeroSerie':'numero_serie','f-identification':'identification',
   'f-dateFabrication':'date_fabrication','f-datePremiereUtilisation':'date_premiere_utilisation','f-dateFinVie':'date_fin_vie',
-  'f-famille':'famille','f-sousFamille':'sous_famille','f-ficheTechnique':'fiche_technique_url'
+  'f-famille':'famille','f-sousFamille':'sous_famille','f-taille':'taille','f-ficheTechnique':'fiche_technique_url'
 };
 function syncEquipDraftFromDom(){
   Object.keys(EQUIP_FIELD_MAP).forEach(id=>{
@@ -1139,7 +1139,7 @@ function syncControlDraftFromDom(){
 /* ---------- Drafts ---------- */
 let equipDraft = {}; let controlDraft = {};
 let sigCanvas=null, sigCtx=null, sigDrawing=false, sigEmpty=true;
-function newEquipDraft(){ equipDraft = {designation:'',marque:'',date_fabrication:'',date_premiere_utilisation:'',numero_serie:'',identification:'',date_fin_vie:'',famille:'',sous_famille:'',fiche_technique_url:'',photo:null,photo_url:null}; }
+function newEquipDraft(){ equipDraft = {designation:'',marque:'',date_fabrication:'',date_premiere_utilisation:'',numero_serie:'',identification:'',date_fin_vie:'',famille:'',sous_famille:'',taille:'',fiche_technique_url:'',photo:null,photo_url:null}; }
 function newControlDraft(){ controlDraft = {date:new Date().toISOString().slice(0,10), verificateur:state.myDisplayName, observations:'', photo:null, statut:'conforme'}; }
 
 /* ---------- Render ---------- */
@@ -1488,7 +1488,7 @@ function renderEquipRow(e){
         ${e.photo_url ? `<img class="thumb" src="${imgSrc(e.photo_url)}">` : `<div class="thumb"></div>`}
         <div style="min-width:0;flex:1;overflow-wrap:break-word;">
           <div style="font-weight:600;font-size:15px;">${esc(e.designation)||'Sans désignation'}</div>
-          <div class="muted">${esc(e.marque)||'—'}</div>
+          <div class="muted">${esc(e.marque)||'—'}${e.taille?' · '+esc(e.taille):''}</div>
           <div class="mono muted" style="margin-top:2px;">${equipIds(e)||'—'}</div>
           ${(function(){ const cur=(e.loans||[]).find(l=>l.status==='en_cours')||(e.loans||[]).find(l=>l.status==='en_attente'); return cur?`<div style="font-size:12px;margin-top:3px;color:var(--warn);">${cur.type==='mission'?'🎯 Mission : ':'📤 Prêté à '}${esc(cur.borrower_name)}${cur.status==='en_attente'?' (à valider)':''}</div>`:''; })()}
         </div>
@@ -1518,6 +1518,7 @@ function renderDetail(){
     ${reformBanner(e)}
     <div class="divider"></div>
     ${(e.famille||e.sous_famille)?`<div class="row"><div class="field" style="flex:1;"><label>Famille</label><p>${esc(e.famille)||'—'}</p></div><div class="field" style="flex:1;"><label>Sous-famille</label><p>${esc(e.sous_famille)||'—'}</p></div></div>`:''}
+    ${e.taille?`<div class="field"><label>Taille</label><p>${esc(e.taille)}</p></div>`:''}
     <div class="field"><label>N° de série</label><p class="mono">${esc(e.numero_serie)||'—'}</p></div>
     <div class="field"><label>Identification</label><p class="mono">${esc(e.identification)||'—'}</p></div>
     <div class="row"><div class="field" style="flex:1;"><label>Fabrication</label><p>${fmtDate(e.date_fabrication)}</p></div><div class="field" style="flex:1;"><label>1ère utilisation</label><p>${fmtDate(e.date_premiere_utilisation)}</p></div></div>
@@ -1629,6 +1630,8 @@ function renderAddEquip(){
     </div>
     <datalist id="famille-list">${['Métallique','Textile',...distinctValues('famille')].filter((v,i,a)=>a.indexOf(v)===i).map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
     <datalist id="sousfamille-list">${distinctValues('sous_famille').map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
+    <div class="field"><label>Taille</label><input id="f-taille" list="taille-list" value="${esc(equipDraft.taille)}" placeholder="S, M, L, 60 m, 120 cm…"></div>
+    <datalist id="taille-list">${['XS','S','M','L','XL','XXL',...distinctValues('taille')].filter((v,i,a)=>a.indexOf(v)===i).map(v=>`<option value="${esc(v)}">`).join('')}</datalist>
     <div class="field"><label>N° de série</label>
       <div style="display:flex;gap:8px;">
         <input id="f-numeroSerie" class="mono" style="flex:1;" value="${esc(equipDraft.numero_serie)}">
@@ -2238,8 +2241,8 @@ function openDetail(id){ state.detailId=id; state.view='detail'; render(); }
 function startAddEquip(){ newEquipDraft(); state.qrStatus=null; _catP=null; loadCatalogOnce(); state.view='addEquip'; render(); }
 function editEquip(id){
   const e = state.equipment.find(x=>x.id===id);
-  equipDraft = {designation:e.designation,marque:e.marque,numero_serie:e.numero_serie,identification:e.identification,date_fabrication:e.date_fabrication,date_premiere_utilisation:e.date_premiere_utilisation,date_fin_vie:e.date_fin_vie,famille:e.famille,sous_famille:e.sous_famille,fiche_technique_url:e.fiche_technique_url,photo:null,photo_url:e.photo_url,_editId:id};
-  state.view='addEquip'; render();
+  equipDraft = {designation:e.designation,marque:e.marque,numero_serie:e.numero_serie,identification:e.identification,date_fabrication:e.date_fabrication,date_premiere_utilisation:e.date_premiere_utilisation,date_fin_vie:e.date_fin_vie,famille:e.famille,sous_famille:e.sous_famille,taille:e.taille||'',fiche_technique_url:e.fiche_technique_url,photo:null,photo_url:e.photo_url,_editId:id};
+  _catP=null; loadCatalogOnce(); state.view='addEquip'; render();
 }
 function cancelAddEquip(){ state.view = equipDraft._editId ? 'detail' : 'list'; render(); }
 async function deleteEquip(id){
@@ -2384,7 +2387,6 @@ function catSummary(c){
 }
 function refreshCatalogMatch(){
   const box = document.getElementById('cat-match'); if(!box) return;
-  if(equipDraft._editId){ box.innerHTML=''; return; }
   if(!state.catalog){ loadCatalogOnce(); return; }
   if(!state.catalog.length){ box.innerHTML=''; return; }
   const d=(document.getElementById('f-designation')||{}).value, m=(document.getElementById('f-marque')||{}).value;
@@ -2399,9 +2401,11 @@ function refreshCatalogMatch(){
 async function useCatalog(id){
   const c=(state.catalog||[]).find(x=>x.id===id); if(!c) return;
   syncEquipDraftFromDom();
-  equipDraft.designation=c.designation; equipDraft.marque=c.marque;
-  if(c.famille) equipDraft.famille=c.famille;
-  if(c.sous_famille) equipDraft.sous_famille=c.sous_famille;
+  const edit=!!equipDraft._editId;  /* fiche existante : on ne complète que les champs vides */
+  if(!edit){ equipDraft.designation=c.designation; equipDraft.marque=c.marque; }
+  else { if(!equipDraft.designation) equipDraft.designation=c.designation; if(!equipDraft.marque) equipDraft.marque=c.marque; }
+  if(c.famille && (!edit || !equipDraft.famille)) equipDraft.famille=c.famille;
+  if(c.sous_famille && (!edit || !equipDraft.sous_famille)) equipDraft.sous_famille=c.sous_famille;
   if(c.photo_path && !equipDraft.photo && !equipDraft.photo_url) equipDraft.photo_url = CAT_PREFIX+c.photo_path;
   if(!equipDraft.fiche_technique_url){
     if(c.fiche_path) equipDraft.fiche_technique_url = CAT_PREFIX+c.fiche_path;
@@ -2516,7 +2520,7 @@ async function scanQr(){
 }
 function duplicateEquip(id){
   const e = state.equipment.find(x=>x.id===id);
-  equipDraft = {designation:e.designation,marque:e.marque,famille:e.famille,sous_famille:e.sous_famille,numero_serie:'',identification:'',
+  equipDraft = {designation:e.designation,marque:e.marque,famille:e.famille,sous_famille:e.sous_famille,taille:e.taille||'',numero_serie:'',identification:'',
     date_fabrication:e.date_fabrication,date_premiere_utilisation:e.date_premiere_utilisation,date_fin_vie:e.date_fin_vie,
     fiche_technique_url:e.fiche_technique_url,photo:null,photo_url:e.photo_url,_duplicateNote:e.designation};
   state.view='addEquip'; render();
@@ -2526,7 +2530,7 @@ async function saveEquip(){
   const fields = {
     designation:get('f-designation'), marque:get('f-marque'), numero_serie:get('f-numeroSerie'), identification:get('f-identification'),
     date_fabrication:get('f-dateFabrication')||null, date_premiere_utilisation:get('f-datePremiereUtilisation')||null, date_fin_vie:get('f-dateFinVie')||null,
-    famille:get('f-famille')||null, sous_famille:get('f-sousFamille')||null,
+    famille:get('f-famille')||null, sous_famille:get('f-sousFamille')||null, taille:get('f-taille')||null,
     fiche_technique_url: get('f-ficheTechnique').trim() || (equipDraft.fiche_technique_url && !isExternalLink(equipDraft.fiche_technique_url) ? equipDraft.fiche_technique_url : null)
   };
   if(!fields.designation){ showToast('La désignation est obligatoire'); return; }
