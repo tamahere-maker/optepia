@@ -1799,7 +1799,7 @@ function renderProfile(){
 
   ${acc('prefs', '<span>⚙️ Affichage et aide</span>', `
     <button class="btn btn-secondary" style="margin-bottom:10px;" onclick="toggleTheme()">${document.documentElement.getAttribute('data-theme')==='light'?'🌙 Passer au thème sombre':'☀️ Passer au thème clair'}</button>
-    <a href="manuel-utilisation.pdf?v=8" target="_blank" rel="noopener" class="btn btn-secondary" style="display:block;text-align:center;text-decoration:none;">📖 Manuel d'utilisation</a>`)}
+    <a href="manuel-utilisation.pdf?v=9" target="_blank" rel="noopener" class="btn btn-secondary" style="display:block;text-align:center;text-decoration:none;">📖 Manuel d'utilisation</a>`)}
 
   ${acc('roles', '<span>ℹ️ Rôles et droits</span>', `
     <div class="card"><b style="font-size:13px;">Administrateur</b><p class="muted" style="font-size:13px;margin-top:4px;">Accès complet : matériel, membres, prêts, validations.</p></div>
@@ -2391,12 +2391,12 @@ function refreshCatalogMatch(){
   if(!state.catalog.length){ box.innerHTML=''; return; }
   const d=(document.getElementById('f-designation')||{}).value, m=(document.getElementById('f-marque')||{}).value;
   const {exact,list} = catalogMatches(d,m);
-  if(exact && equipDraft._catId===exact.id){ box.innerHTML = `<div class="qr-status ok" style="margin:-4px 0 14px;">✓ Données du catalogue appliquées</div>`; return; }
+  if(exact && equipDraft._catId===exact.id){ box.innerHTML = `<div class="qr-status ok" style="margin:-4px 0 6px;">✓ Données du catalogue appliquées</div><div class="muted" style="font-size:11px;margin:0 0 14px;line-height:1.4;">ℹ️ Aide au remplissage : la photo, la fiche et les données du catalogue sont indicatives. Vérifie qu'elles correspondent bien à ton matériel (modèle, version, taille) et à sa notice.</div>`; return; }
   let html='';
   if(exact) html += `<button type="button" class="btn btn-primary" style="margin:-4px 0 12px;flex-direction:column;gap:2px;text-align:left;align-items:flex-start;" onclick="useCatalog('${exact.id}')"><span>📚 Trouvé dans le catalogue — Utiliser</span><span style="font-size:12px;font-weight:500;opacity:.85;">${esc(exact.marque)} · ${esc(exact.designation)}${catSummary(exact)?' — '+esc(catSummary(exact)):''}</span></button>`;
   if(list.length) html += `<div class="muted" style="font-size:12px;margin:-2px 0 6px;">${exact?'Autres références proches':'Suggestions du catalogue'}</div>`+
     list.map(c=>`<button type="button" class="btn btn-secondary" style="margin:0 0 6px;justify-content:flex-start;text-align:left;gap:8px;" onclick="useCatalog('${c.id}')">📚 <span style="min-width:0;"><b>${esc(c.designation)}</b> <span class="muted" style="font-size:12px;">${esc(c.marque)}</span></span></button>`).join('');
-  box.innerHTML = html ? `<div style="margin-bottom:12px;">${html}</div>` : '';
+  box.innerHTML = html ? `<div style="margin-bottom:12px;">${html}<div class="muted" style="font-size:11px;line-height:1.4;">ℹ️ Aide au remplissage : la photo, la fiche et les données du catalogue sont indicatives. Vérifie qu'elles correspondent bien à ton matériel (modèle, version, taille) et à sa notice.</div></div>` : '';
 }
 async function useCatalog(id){
   const c=(state.catalog||[]).find(x=>x.id===id); if(!c) return;
@@ -2415,7 +2415,7 @@ async function useCatalog(id){
   autoFinVie();
   await resolveSignedUrls([equipDraft.photo_url, equipDraft.fiche_technique_url]);
   render();
-  showToast('Données du catalogue appliquées');
+  showToast('Données du catalogue appliquées — à vérifier');
 }
 /* Fin de vie proposée : durée du catalogue, sinon règle Petzl (10 ans hors métal), à partir de la date de fabrication */
 function autoFinVie(){
