@@ -265,6 +265,17 @@ async function loadCatStorage(){
   }catch(e){ state.catStorage = {error:e.message||'erreur'}; }
   if(state.view==='units') render();
 }
+/* ----- place prise par les sauvegardes (RPC admin_backup_stats) ----- */
+async function loadBkStats(){
+  state.bkStats = {loading:true};
+  try{
+    const { data, error } = await sb.rpc('admin_backup_stats');
+    if(error) throw error;
+    const r = Array.isArray(data)?data[0]:data;
+    state.bkStats = {n:Number(r.backups_count)||0, db:Number(r.db_bytes)||0, files:Number(r.files_bytes)||0, nf:Number(r.files_count)||0};
+  }catch(e){ state.bkStats = {error:e.message||'erreur'}; }
+  if(state.view==='units') render();
+}
 /* ---------------- Chargement ---------------- */
 async function loadAll(){
   const [unitsRes, membersRes, equipRes, statsRes, storageRes, emailsRes, billRes, actRes, uactRes, bkRes] = await Promise.all([
@@ -301,7 +312,7 @@ async function loadAll(){
   state.allEquipment.forEach(e=>paths.push(e.photo_url));
   resolveSignedUrls(paths).then(render);
 }
-async function loadBackupsOnly(){
+async function loadBackupsOnly(){ state.bkStats = undefined;
   const r = await sb.rpc('admin_list_backups');
   if(!r.error) state.backups = r.data || [];
 }
@@ -698,10 +709,11 @@ function renderAlerts(){
   if(!state.mfaEnrolled) A.push({lvl:'warn', t:"Double authentification non activée sur ton compte admin", d:"Active-la dans le profil de l'application : l'accès admin est très sensible."});
   if(s){
     const catB = (state.catStorage && !state.catStorage.loading && !state.catStorage.error) ? state.catStorage.fiches+state.catStorage.photos : 0;
-    const p = (s.storage_total_bytes+catB)/(1024*1024*1024);
+    const bkF = (state.bkStats && !state.bkStats.loading && !state.bkStats.error) ? state.bkStats.files : 0;
+    const p = (s.storage_total_bytes+catB+bkF)/(1024*1024*1024);
     if(p>0.7) A.push({lvl:p>0.9?'danger':'warn', t:`Stockage fichiers à ${(p*100).toFixed(0)} % de 1 Go`, d:'Passe en Supabase Pro ou nettoie les fichiers inutiles.'});
     const d = s.db_size_bytes/(500*1024*1024);
-    if(d>0.7) A.push({lvl:d>0.9?'danger':'warn', t:`Base de données à ${(d*100).toFixed(0)} % de 500 Mo`, d:'Les sauvegardes automatiques en font partie.'});
+    if(d>0.7) A.push({lvl:d>0.9?'danger':'warn', t:`Base de données à ${(d*100).toFixed(0)} % de 500 Mo`, d:'Les sauvegardes (données) en font partie.'});
   }
   const unconf = state.userAct.filter(u=>!u.email_confirmed && daysSince(u.created_at)>=3).length;
   if(unconf) A.push({lvl:'warn', t:`${unconf} compte(s) jamais confirmé(s) depuis plus de 3 jours`});
@@ -746,7 +758,7 @@ function renderUnitsList(){
   <div class="card">
     <button class="btn btn-primary" ${state.sqlMissing?'disabled':''} onclick="askBackupAll()">Sauvegarder toutes les unités</button>
     <button class="btn b2" style="margin-top:8px;" ${state.busy?'disabled':''} onclick="downloadGlobalBackup()">Exporter tout (JSON)</button>
-    <p class="muted" style="font-size:11px;margin-top:8px;">Sauvegarde automatique chaque nuit (02h30 UTC) · complément des sauvegardes Supabase (Pro).</p>
+    <p class="muted" style="font-size:11px;margin-top:8px;">Sauvegarde automatique chaque dimanche soir (21h30 UTC), 4 conservées · complément des sauvegardes Supabase (Pro).</p>
   </div>
   <div class="search"><input placeholder="Rechercher une unité…" value="${esc(state.search)}" oninput="onSearch(this.value)"></div>
   <div class="chips">${FILTERS.map(f=>`<button class="chip ${state.filter===f[0]?'on':''}" onclick="setFilter('${f[0]}')">${f[1]}</button>`).join('')}</div>
@@ -782,16 +794,21 @@ function renderResourceUsage(){
     <p class="muted" style="font-size:12px;margin-bottom:2px;">Base de données</p>
     <div class="row" style="font-size:13px;"><b>${formatBytes(s.db_size_bytes)}</b><span class="muted">/ 500 Mo (gratuit) · 8 Go (Pro)</span></div>
     ${renderUsageBar(s.db_size_bytes, FREE_DB)}
+    ${(()=>{ const bk=state.bkStats, bok=bk&&!bk.loading&&!bk.error;
+      return `<p class="muted" style="font-size:11px;margin:4px 0 0;">dont données des sauvegardes : ${bok?`<b>${formatBytes(bk.db)}</b> (${bk.n} sauvegarde(s))`:(bk&&bk.error?'indisponible':'calcul…')}</p>`; })()}
     ${(()=>{ const c=state.catStorage, ok=c&&!c.loading&&!c.error;
+      const bk=state.bkStats, bok=bk&&!bk.loading&&!bk.error;
       if(c===undefined) setTimeout(loadCatStorage,0);
-      const catB = ok? c.fiches+c.photos : 0, tot = s.storage_total_bytes+catB;
+      if(bk===undefined) setTimeout(loadBkStats,0);
+      const catB = ok? c.fiches+c.photos : 0, bkB = bok? bk.files : 0, tot = s.storage_total_bytes+catB+bkB;
       const pc = Math.round(100*tot/FREE_STORAGE);
-      const nfiles = s.storage_file_count + (ok? c.nf+c.np : 0);
+      const nfiles = s.storage_file_count + (ok? c.nf+c.np : 0) + (bok? bk.nf : 0);
       return `<p class="muted" style="font-size:12px;margin:12px 0 2px;">Stockage fichiers (${nfiles} fichier(s))</p>
       <div class="row" style="font-size:13px;"><b>${formatBytes(tot)}</b><span class="muted">/ 1 Go (gratuit) · 100 Go (Pro) · ${pc} %</span></div>
-      ${renderStackedBar([{bytes:s.storage_total_bytes,color:'var(--accent)'},{bytes:catB,color:'#4DA3FF'}], FREE_STORAGE)}
-      <p style="font-size:12px;margin-top:6px;line-height:1.6;"><span style="color:var(--accent);">●</span> Unités (photos, fiches, sauvegardes) : <b>${formatBytes(s.storage_total_bytes)}</b><br>
-      <span style="color:#4DA3FF;">●</span> Catalogue : ${ok?`<b>${formatBytes(catB)}</b> <span class="muted">(${c.nf} fiche(s) : ${formatBytes(c.fiches)} · ${c.np} photo(s) : ${formatBytes(c.photos)})</span>`:(c&&c.error?'<span class="muted">indisponible ('+esc(c.error)+')</span>':'<span class="muted">calcul…</span>')}</p>`; })()}
+      ${renderStackedBar([{bytes:s.storage_total_bytes,color:'var(--accent)'},{bytes:catB,color:'#4DA3FF'},{bytes:bkB,color:'#F2A93B'}], FREE_STORAGE)}
+      <p style="font-size:12px;margin-top:6px;line-height:1.6;"><span style="color:var(--accent);">●</span> Unités (photos, signatures, fiches) : <b>${formatBytes(s.storage_total_bytes)}</b><br>
+      <span style="color:#4DA3FF;">●</span> Catalogue : ${ok?`<b>${formatBytes(catB)}</b> <span class="muted">(${c.nf} fiche(s) : ${formatBytes(c.fiches)} · ${c.np} photo(s) : ${formatBytes(c.photos)})</span>`:(c&&c.error?'<span class="muted">indisponible ('+esc(c.error)+')</span>':'<span class="muted">calcul…</span>')}<br>
+      <span style="color:#F2A93B;">●</span> Sauvegardes (copies de fichiers) : ${bok?`<b>${formatBytes(bkB)}</b> <span class="muted">(${bk.nf} fichier(s))</span>`:(bk&&bk.error?'<span class="muted">indisponible ('+esc(bk.error)+')</span>':'<span class="muted">calcul…</span>')}</p>`; })()}
     <p class="muted" style="font-size:11px;margin-top:6px;">Bande passante Supabase non disponible ici — à vérifier dans Supabase (Reports). Hébergement : à consulter dans Cloudflare (Pages → Analytics).</p>
   </div>`;
 }
@@ -1065,7 +1082,7 @@ function renderBackupsView(){
   return `
   <h1 style="margin-bottom:12px;">Sauvegardes</h1>
   <div class="card">
-    <p class="muted" style="font-size:12px;">Chaque nuit, une sauvegarde automatique des données est faite pour chaque unité modifiée (7 conservées). Les sauvegardes manuelles (10 conservées) incluent aussi une copie des photos et signatures. Avant une restauration ou une suppression, l'état actuel est sauvegardé.</p>
+    <p class="muted" style="font-size:12px;">Chaque dimanche soir, une sauvegarde automatique des données est faite pour chaque unité modifiée (les 4 dernières sont conservées, la plus ancienne est effacée). Les sauvegardes manuelles (10 conservées) incluent aussi une copie des photos et signatures. Avant une restauration ou une suppression, l'état actuel est sauvegardé.</p>
     <button class="btn btn-primary" style="margin-top:12px;" onclick="askBackupAll()">Sauvegarder toutes les unités</button>
   </div>
   ${deleted.length?`<div class="card" style="border-color:var(--warn);"><h3 style="color:var(--warn);margin-bottom:6px;">Unités supprimées restaurables</h3>${deleted.map(b=>renderBackupRow(b,true)).join('')}</div>`:''}
