@@ -785,7 +785,8 @@ function openLiveScanner(){
     document.body.appendChild(ov);
     const video=ov.querySelector('#scn-v'), msg=ov.querySelector('#scn-msg');
     let stream=null, stopped=false;
-    const finish=(v)=>{ if(stopped) return; stopped=true; try{ stream&&stream.getTracks().forEach(t=>t.stop()); }catch(e){} ov.remove(); resolve(v); };
+    let navH=null; const finish=(v)=>{ if(stopped) return; stopped=true; try{ stream&&stream.getTracks().forEach(t=>t.stop()); }catch(e){} ov.remove(); if(navH) navH.close(); resolve(v); };
+    navH=navOverlayOpen(()=>finish(null));
     ov.querySelector('#scn-x').onclick=()=>finish(null);
     ov.querySelector('#scn-photo').onclick=()=>finish({fallback:true});
     try{
@@ -951,7 +952,9 @@ function openCropper(url){
       const up = e=>{ pts.delete(e.pointerId); lastDist = 0; };
       stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up);
       stage.addEventListener('wheel', e=>{ e.preventDefault(); z = Math.min(4, Math.max(1, z * (e.deltaY<0?1.08:0.93))); zoom.value = z; layout(); }, {passive:false});
-      const close = (v)=>{ ov.remove(); resolve(v); };
+      let navH=null;
+      const close = (v)=>{ ov.remove(); navH.close(); resolve(v); };
+      navH=navOverlayOpen(()=>close(null));
       ov.querySelector('#cr-no').onclick = ()=>close(null);
       ov.querySelector('#cr-ok').onclick = ()=>{
         const s = base*z, c = document.createElement('canvas'); c.width = c.height = 400;
@@ -971,7 +974,9 @@ function openLightbox(src){
   const im = ov.querySelector('img'); im.src = src;
   let sc=1, tx=0, ty=0, moved=false, lastTap=0; const pts=new Map(); let lastDist=0;
   const apply=()=>{ if(sc<=1){ sc=1; tx=0; ty=0; } im.style.transform=`translate(${tx}px,${ty}px) scale(${sc})`; };
-  const close=()=>{ ov.remove(); document.removeEventListener('keydown',onKey); };
+  const rawClose=()=>{ ov.remove(); document.removeEventListener('keydown',onKey); };
+  const navH=navOverlayOpen(rawClose);
+  const close=()=>{ rawClose(); navH.close(); };
   const onKey=e=>{ if(e.key==='Escape') close(); };
   document.addEventListener('keydown',onKey);
   ov.querySelector('.lb-x').onclick = e=>{ e.stopPropagation(); close(); };
@@ -1051,7 +1056,9 @@ function openCropperRect(url){
       const up = e=>{ pts.delete(e.pointerId); lastDist = 0; };
       stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up);
       stage.addEventListener('wheel', e=>{ e.preventDefault(); z = Math.min(4, Math.max(1, z * (e.deltaY<0?1.08:0.93))); zoom.value = z; layout(); }, {passive:false});
-      const close = v=>{ ov.remove(); resolve(v); };
+      let navH=null;
+      const close = v=>{ ov.remove(); navH.close(); resolve(v); };
+      navH=navOverlayOpen(()=>close(null));
       ov.querySelector('#cr-no').onclick = ()=>close(null);
       ov.querySelector('#cr-ok').onclick = ()=>{
         const s = base*z, srcW = Sw/s, srcH = Sh/s;
@@ -1143,6 +1150,46 @@ function newEquipDraft(){ equipDraft = {designation:'',marque:'',date_fabricatio
 function newControlDraft(){ controlDraft = {date:new Date().toISOString().slice(0,10), verificateur:state.myDisplayName, observations:'', photo:null, statut:'conforme'}; }
 
 /* ---------- Render ---------- */
+/* ===== Bouton « retour » du téléphone : revient à l'écran précédent au lieu de fermer l'appli ===== */
+const NAV_FIELDS=['view','detailId','controlDetailId','batchDetailKey','batchDetailType','sheet','filter','groupFilter','famFilter','availFilter'];
+const NAV_FREE=['loading','error','auth','resetPassword','mfaChallenge','unitSetup','unitPicker'];
+const NAV_FORMS=['addEquip','addControl','loanOut','loanReturn','checkout','batchReturn','batchControl','importPreview','refuseLoan','transferOwnership'];
+let _navCur=null, _navCurView=null, _navBusy=false, _ovSkip=0; const _ovStack=[];
+function navSnap(){ const o={unit:(state.unit&&state.unit.id)||null}; NAV_FIELDS.forEach(k=>{ o[k]=state[k]===undefined?null:state[k]; }); return o; }
+function navSync(){
+  if(_navBusy) return;
+  try{
+    const snap=navSnap(), key=JSON.stringify(snap);
+    if(NAV_FREE.includes(state.view)){ history.replaceState({nav:snap},'',location.href); _navCur=key; _navCurView=state.view; return; }
+    if(key===_navCur) return;
+    if(_navCur===null || NAV_FORMS.includes(_navCurView)) history.replaceState({nav:snap},'',location.href);
+    else history.pushState({nav:snap},'',location.href);
+    _navCur=key; _navCurView=state.view;
+  }catch(e){}
+}
+function navOverlayOpen(onBack){
+  const it={onBack,done:false};
+  _ovStack.push(it);
+  try{ history.pushState({nav:navSnap(),ov:1},'',location.href); }catch(e){}
+  it.close=()=>{ if(it.done) return; it.done=true; const i=_ovStack.indexOf(it); if(i>=0) _ovStack.splice(i,1); _ovSkip++; try{ history.back(); }catch(e){} };
+  return it;
+}
+window.addEventListener('popstate',e=>{
+  if(_ovSkip>0){ _ovSkip--; return; }
+  if(_ovStack.length){ const it=_ovStack.pop(); it.done=true; try{ it.onBack(); }catch(err){} return; }
+  const s=e.state&&e.state.nav; if(!s) return;
+  if(NAV_FREE.includes(state.view)) return;
+  if(JSON.stringify(s)===_navCur){ history.back(); return; }
+  _navBusy=true;
+  try{
+    const curUnit=(state.unit&&state.unit.id)||null;
+    if(s.unit!==curUnit){ state.view='home'; state.detailId=null; }
+    else NAV_FIELDS.forEach(k=>{ state[k]=s[k]; });
+    render();
+    _navCur=JSON.stringify(navSnap()); _navCurView=state.view;
+  }catch(err){}
+  _navBusy=false;
+});
 function render(){
   const app = document.getElementById('app');
   let html = '';
@@ -1172,6 +1219,7 @@ function render(){
   app.innerHTML = html;
   if(state.view==='addEquip') refreshSamePhoto();
   afterRender();
+  navSync();
 }
 function brandMark(h){ return `<img src="logo-mark.png" alt="" style="height:${h||56}px;width:auto;display:block;margin:0 auto 18px;">`; }
 function renderTopbar(){
