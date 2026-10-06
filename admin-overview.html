@@ -1191,12 +1191,65 @@ async function catUploadPhoto(id, file){
   const { error } = await sb.storage.from(CAT_BUCKET).upload(path, blob, {upsert:true, contentType:'image/jpeg'});
   if(error) throw error; return path;
 }
+function md5hex(buf){
+  const bytes=new Uint8Array(buf), n=bytes.length;
+  const K=new Int32Array(64), S=[7,12,17,22,7,12,17,22,7,12,17,22,7,12,17,22,5,9,14,20,5,9,14,20,5,9,14,20,5,9,14,20,4,11,16,23,4,11,16,23,4,11,16,23,4,11,16,23,6,10,15,21,6,10,15,21,6,10,15,21,6,10,15,21];
+  for(let i=0;i<64;i++) K[i]=Math.floor(Math.abs(Math.sin(i+1))*4294967296)|0;
+  const padLen=((n+8)>>6<<6)+64, m=new Uint8Array(padLen);
+  m.set(bytes); m[n]=0x80;
+  const dv=new DataView(m.buffer); dv.setUint32(padLen-8,(n<<3)>>>0,true); dv.setUint32(padLen-4,Math.floor(n/536870912),true);
+  let a0=0x67452301|0,b0=0xefcdab89|0,c0=0x98badcfe|0,d0=0x10325476|0;
+  const M=new Int32Array(16);
+  for(let off=0;off<padLen;off+=64){
+    for(let i=0;i<16;i++) M[i]=dv.getInt32(off+i*4,true);
+    let A=a0,B=b0,C=c0,D=d0;
+    for(let i=0;i<64;i++){
+      let F,g;
+      if(i<16){F=(B&C)|(~B&D);g=i;} else if(i<32){F=(D&B)|(~D&C);g=(5*i+1)&15;} else if(i<48){F=B^C^D;g=(3*i+5)&15;} else {F=C^(B|~D);g=(7*i)&15;}
+      F=(F+A+K[i]+M[g])|0; A=D; D=C; C=B; B=(B+((F<<S[i])|(F>>>(32-S[i]))))|0;
+    }
+    a0=(a0+A)|0;b0=(b0+B)|0;c0=(c0+C)|0;d0=(d0+D)|0;
+  }
+  const out=new DataView(new ArrayBuffer(16)); out.setInt32(0,a0,true);out.setInt32(4,b0,true);out.setInt32(8,c0,true);out.setInt32(12,d0,true);
+  let h=''; for(let i=0;i<16;i++) h+=out.getUint8(i).toString(16).padStart(2,'0'); return h;
+}
+
+/* ----- fiches techniques partagées : un PDF identique n'est stocké qu'une seule fois ----- */
+async function catFicheList(force){
+  if(state.catFicheList && !force) return state.catFicheList;
+  const list=[];
+  for(let off=0; off<20000; off+=1000){
+    const { data, error } = await sb.storage.from(CAT_BUCKET).list('fiches', {limit:1000, offset:off});
+    if(error) throw error;
+    (data||[]).forEach(o=>{ if(o && o.id){ const m=o.metadata||{}; list.push({path:'fiches/'+o.name, size:m.size||0, md5:String(m.eTag||'').replace(/"/g,'').toLowerCase()}); } });
+    if(!data || data.length<1000) break;
+  }
+  state.catFicheList = list; return list;
+}
 async function catUploadFiche(id, file){
   if(file.size > 15*1024*1024) throw new Error('PDF trop lourd (15 Mo max) : '+file.name);
   state.catStorage = undefined;
-  const path = `fiches/${id}.pdf`;
+  const md5 = md5hex(await file.arrayBuffer());
+  const list = await catFicheList();
+  const same = list.find(x=>x.md5===md5 && x.size===file.size);
+  if(same){ if(same.path!==`fiches/${id}.pdf`) state.catShareHits=(state.catShareHits||0)+1; return same.path; }   /* déjà en stock : on réutilise ce fichier */
+  let path = `fiches/${id}.pdf`;
+  if(state.catalog.some(r=>r.id!==id && r.fiche_path===path)) path = `fiches/${id}-${Date.now().toString(36)}.pdf`;  /* ne jamais écraser un fichier partagé */
   const { error } = await sb.storage.from(CAT_BUCKET).upload(path, file, {upsert:true, contentType:'application/pdf'});
-  if(error) throw error; return path;
+  if(error) throw error;
+  const i=list.findIndex(x=>x.path===path); if(i>=0) list.splice(i,1);
+  list.push({path, size:file.size, md5});
+  return path;
+}
+/* supprime un ancien PDF seulement s'il n'est plus utilisé par aucune référence ni aucun matériel */
+async function catReleaseFiche(oldPath){
+  if(!oldPath) return false;
+  if(state.catalog.some(r=>r.fiche_path===oldPath)) return false;
+  if((state.allEquipment||[]).some(e=>e.fiche_technique_url==='catalogue:'+oldPath)) return false;
+  const { error } = await sb.storage.from(CAT_BUCKET).remove([oldPath]);
+  if(error) return false;
+  if(state.catFicheList) state.catFicheList = state.catFicheList.filter(x=>x.path!==oldPath);
+  state.catStorage = undefined; return true;
 }
 
 /* ----- éditeur d'une référence ----- */
@@ -1245,6 +1298,7 @@ async function saveCat(id){
   btn.disabled=true; btn.textContent='Enregistrement…'; err.textContent='';
   try{
     const old = id ? state.catalog.find(x=>x.id===id) : null;
+    const oldFiche = old ? old.fiche_path : null;
     const rid = id || newId();
     const row = { marque, designation, famille:g('ce-famille')||null, sous_famille:g('ce-sous')||null, duree_vie_ans:duree, fiche_url:url||null };
     const pf=document.getElementById('ce-photo').files[0], ff=document.getElementById('ce-fiche').files[0];
@@ -1257,6 +1311,8 @@ async function saveCat(id){
       if(/duplicate|unique|23505/i.test(res.error.message||res.error.code)) throw new Error('Cette marque + désignation existe déjà dans le catalogue.');
       throw res.error;
     }
+    if(old) Object.assign(old,row);
+    if(ff && old && oldFiche && oldFiche!==row.fiche_path) await catReleaseFiche(oldFiche);
     logAdmin(old?'Catalogue : référence modifiée':'Catalogue : référence ajoutée', marque+' — '+designation);
     closeCatEditor(); await loadCatalog();
   }catch(e){ err.textContent = e.message||String(e); btn.disabled=false; btn.textContent='Enregistrer'; }
@@ -1267,10 +1323,11 @@ function catAskDelete(id){
   openModal({ title:'Supprimer cette référence ?', danger:true, confirmLabel:'Supprimer',
     body:`<p><b>${esc(c.marque)} — ${esc(c.designation)}</b></p><p class="muted" style="font-size:12px;">Les matériels déjà créés dans les unités ne sont pas touchés, mais ceux qui utilisaient la fiche ou la photo du catalogue perdront ce fichier. Supprime plutôt la référence quand elle est une erreur.</p>`,
     onConfirm:()=>runOp('Suppression…', async ()=>{
-      const files=[c.photo_path,c.fiche_path].filter(Boolean);
       const { error } = await sb.from('equipment_catalog').delete().eq('id',id);
       if(error) throw error;
-      if(files.length){ await sb.storage.from(CAT_BUCKET).remove(files); state.catStorage = undefined; }
+      state.catalog = state.catalog.filter(x=>x.id!==id);
+      if(c.photo_path){ await sb.storage.from(CAT_BUCKET).remove([c.photo_path]); state.catStorage = undefined; }
+      await catReleaseFiche(c.fiche_path);
       logAdmin('Catalogue : référence supprimée', c.marque+' — '+c.designation);
       await loadCatalog();
     }) });
@@ -1386,18 +1443,22 @@ function catPrepareFiles(files){
   openModal({ title:'Associer ces fichiers ?', confirmLabel: ok.length?'Associer '+ok.length+' fichier(s)':'OK', noConfirm:!ok.length,
     body:`<p><b>${ok.length}</b> fichier(s) reconnu(s), <b>${ko.length}</b> non reconnu(s).</p><p class="muted" style="font-size:12px;">Un fichier est associé quand son nom est « Marque Désignation » (ex. <i>Petzl Am'D Auto.pdf</i>). Les accents, majuscules et tirets sont ignorés. Un PDF devient la fiche, une image devient la photo.</p>${ko.length?`<details><summary class="muted" style="font-size:12px;">Non reconnus</summary><ul class="dl" style="font-size:12px;">${ko.slice(0,60).map(n=>`<li>${esc(n)}</li>`).join('')}${ko.length>60?'<li>…</li>':''}</ul></details>`:''}`,
     onConfirm:()=>runOp('Envoi des fichiers…', async ()=>{
-      let done=0, errs=[];
+      let done=0, errs=[], freed=0;
+      state.catFicheList=undefined; state.catShareHits=0;
       for(const it of catPendingFiles){
         try{
+          const oldFiche = it.c.fiche_path;
           const patch = it.kind==='fiche' ? { fiche_path: await catUploadFiche(it.c.id, it.f) } : { photo_path: await catUploadPhoto(it.c.id, it.f) };
           const { error } = await sb.from('equipment_catalog').update(patch).eq('id',it.c.id);
           if(error) throw error; done++;
+          Object.assign(it.c, patch);
+          if(it.kind==='fiche' && oldFiche && oldFiche!==patch.fiche_path){ if(await catReleaseFiche(oldFiche)) freed++; }
           setProgress(`Envoi des fichiers… ${done}/${catPendingFiles.length}`);
         }catch(e){ errs.push(it.f.name+' : '+(e.message||e)); }
       }
       logAdmin('Catalogue : fichiers associés', done+' fichier(s)');
       await loadCatalog();
-      return { title:'Terminé', body:`<p>${done} fichier(s) associé(s).</p>${errs.length?`<p style="color:var(--danger);font-size:12px;">${errs.length} erreur(s) :</p><ul class="dl" style="font-size:12px;">${errs.slice(0,10).map(e=>`<li>${esc(e)}</li>`).join('')}</ul>`:''}` };
+      return { title:'Terminé', body:`<p>${done} fichier(s) associé(s).</p>${state.catShareHits?`<p class="muted" style="font-size:12px;">♻️ ${state.catShareHits} fiche(s) identique(s) à un PDF déjà en stock : partagée(s), non dupliquée(s).${freed?' '+freed+' ancien(s) fichier(s) supprimé(s).':''}</p>`:''}${errs.length?`<p style="color:var(--danger);font-size:12px;">${errs.length} erreur(s) :</p><ul class="dl" style="font-size:12px;">${errs.slice(0,10).map(e=>`<li>${esc(e)}</li>`).join('')}</ul>`:''}` };
     }) });
 }
 let catPendingFiles = [];
