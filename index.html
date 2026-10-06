@@ -86,6 +86,17 @@
   .acc-body .card{background:var(--surface2);}
   .acc-body>.card:last-child{margin-bottom:0;}
   .acc-body .mfa-title{display:none;}
+  .nt-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);}
+  .nt-row:last-of-type{border-bottom:0;}
+  .nt-row .nt-txt{flex:1;min-width:0;}
+  .nt-row .nt-lbl{font-weight:600;font-size:14px;}
+  .nt-row .nt-desc{font-size:12px;color:var(--text-muted);margin-top:2px;line-height:1.4;}
+  .nt-sw{position:relative;width:46px;height:26px;flex-shrink:0;}
+  .nt-sw input{position:absolute;inset:0;width:100%;height:100%;opacity:0;margin:0;cursor:pointer;z-index:2;}
+  .nt-sw span{position:absolute;inset:0;background:var(--surface2);border:1px solid var(--border);border-radius:13px;transition:.15s;}
+  .nt-sw span::after{content:'';position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:var(--text-muted);transition:.15s;}
+  .nt-sw input:checked+span{background:var(--accent);border-color:var(--accent);}
+  .nt-sw input:checked+span::after{left:22px;background:#0B1014;}
   .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:12px;}
   .card.tap{cursor:pointer;transition:border-color .15s;}
   .card.tap:active{border-color:var(--accent);}
@@ -465,7 +476,7 @@ async function submitMfaChallenge(){
 }
 async function doLogout(){
   await sb.auth.signOut();
-  state = Object.assign(state, {unit:null, role:null, equipment:[], members:[], journal:[], memberships:[], activeMembershipId:null, mfaFactorId:null, isPlatformAdmin:undefined, mfaChallengeId:null, view:'auth', authMode:'login'});
+  state = Object.assign(state, {unit:null, role:null, equipment:[], members:[], journal:[], memberships:[], activeMembershipId:null, mfaFactorId:null, isPlatformAdmin:undefined, notifPrefs:undefined, notifPrefsErr:false, mfaChallengeId:null, view:'auth', authMode:'login'});
   render();
 }
 function setAuthMode(m){ state.authMode=m; render(); }
@@ -1769,6 +1780,53 @@ function renderApprovals(){
 }
 
 /* ---- Profil ---- */
+/* ---------- Notifications e-mail (préférences) ---------- */
+// Clé absente = activée. Les e-mails de sécurité (mot de passe, double authentification…) ne sont pas désactivables.
+const NOTIF_TYPES=[
+  {key:'weekly_digest',   label:'Récapitulatif hebdomadaire', desc:'Chaque lundi : contrôles et fins de vie à venir ou dépassés, prêts en retard ou en cours.', roles:['administrateur','verificateur']},
+  {key:'loan_to_validate',label:'Prêt à valider',             desc:"Dès qu'un assistant enregistre un prêt qui attend ta validation.", roles:['administrateur','verificateur']},
+  {key:'loan_activity',   label:'Sorties en mission et retours', desc:"Quand du matériel part en mission, et quand un prêt ou une mission est restitué.", roles:['administrateur','verificateur']},
+  {key:'due_soon',       label:'Rappel à 7 jours',           desc:"Contrôle annuel ou fin de vie qui arrive à échéance dans 7 jours.", roles:['administrateur','verificateur']},
+  {key:'equipment_alert', label:'Matériel réformé ou avec réserve', desc:"Quand un contrôle enregistré par un autre membre réforme un matériel ou relève une réserve.", roles:['administrateur','verificateur']},
+  {key:'ownership',       label:'Transfert de propriété',     desc:"Quand la propriété d'une unité est transférée (ancien et nouveau propriétaire).", roles:['administrateur']},
+  {key:'role_changed',    label:'Changement de mon rôle',     desc:"Quand un administrateur modifie ton rôle dans une unité.", roles:['administrateur','verificateur','assistant','lecteur']},
+  {key:'membership',      label:'Arrivée, départ ou retrait d\'une unité', desc:"Quand tu rejoins une unité, la quittes, ou en es retiré.", roles:['administrateur','verificateur','assistant','lecteur']},
+  {key:'loan_decision',   label:'Décision sur mes prêts',     desc:"Quand un prêt que tu as proposé est validé ou refusé (avec le motif).", roles:['assistant']},
+];
+function notifTypesForRole(){ return NOTIF_TYPES.filter(t=>t.roles.includes(state.role)); }
+function renderNotifSection(){
+  const types=notifTypesForRole();
+  if(state.notifPrefs===undefined){ setTimeout(loadNotifPrefs,0); return `<p class="muted">Chargement…</p>`; }
+  const p=state.notifPrefs||{};
+  const rows=types.length ? types.map(t=>`
+    <div class="nt-row">
+      <div class="nt-txt"><div class="nt-lbl">${esc(t.label)}</div><div class="nt-desc">${esc(t.desc)}</div></div>
+      <label class="nt-sw"><input type="checkbox" ${p[t.key]===false?'':'checked'} onchange="toggleNotif('${t.key}',this.checked)"><span></span></label>
+    </div>`).join('') : `<p class="muted" style="margin-bottom:8px;">Avec ton rôle actuel (${esc(ROLES[state.role].label)}), aucune notification optionnelle ne te concerne.</p>`;
+  return `${rows}
+    ${state.notifPrefsErr?`<p class="muted" style="color:var(--warn);font-size:12px;margin-top:8px;">Les préférences ne sont pas encore disponibles : tout reste activé pour le moment.</p>`:''}
+    <p class="muted" style="font-size:12px;margin-top:10px;">Les e-mails de sécurité (bienvenue, mot de passe, double authentification, suppression de compte) sont toujours envoyés. Tes choix s'appliquent à toutes tes unités.</p>`;
+}
+async function loadNotifPrefs(){
+  if(state._npLoading) return;
+  state._npLoading=true;
+  try{
+    const {data,error}=await sb.from('notification_prefs').select('prefs').eq('user_id',state.session.user.id).maybeSingle();
+    state.notifPrefs=(!error && data && data.prefs) ? data.prefs : {};
+    state.notifPrefsErr=!!error;
+  }catch(e){ state.notifPrefs={}; state.notifPrefsErr=true; }
+  state._npLoading=false;
+  if(state.view==='profile') render();
+}
+async function toggleNotif(key,on){
+  const before=Object.assign({},state.notifPrefs||{});
+  const next=Object.assign({},before); if(on) delete next[key]; else next[key]=false;
+  state.notifPrefs=next;
+  const {error}=await sb.from('notification_prefs').upsert({user_id:state.session.user.id,prefs:next,updated_at:new Date().toISOString()},{onConflict:'user_id'});
+  if(error){ state.notifPrefs=before; showToast("Impossible d'enregistrer ce choix : "+error.message); render(); return; }
+  showToast(on?'Notification activée':'Notification désactivée');
+}
+
 function acc(id, title, body, forceOpen){
   state.profOpen = state.profOpen || {};
   const open = forceOpen || !!state.profOpen[id];
@@ -1845,9 +1903,11 @@ function renderProfile(){
 
   ${acc('mfa', `<span>🛡️ Double authentification</span><span class="badge ${mfaOn?'badge-ok':''}" style="margin-left:auto;${mfaOn?'':'background:transparent;color:var(--text-muted);'}">${mfaOn?'Activée':'Désactivée'}</span>`, renderMfaSection(), !!state.mfaEnroll)}
 
+  ${acc('notif', '<span>🔔 Notifications</span>', renderNotifSection())}
+
   ${acc('prefs', '<span>⚙️ Affichage et aide</span>', `
     <button class="btn btn-secondary" style="margin-bottom:10px;" onclick="toggleTheme()">${document.documentElement.getAttribute('data-theme')==='light'?'🌙 Passer au thème sombre':'☀️ Passer au thème clair'}</button>
-    <a href="manuel-utilisation.pdf?v=9" target="_blank" rel="noopener" class="btn btn-secondary" style="display:block;text-align:center;text-decoration:none;">📖 Manuel d'utilisation</a>`)}
+    <a href="manuel-utilisation.pdf?v=10" target="_blank" rel="noopener" class="btn btn-secondary" style="display:block;text-align:center;text-decoration:none;">📖 Manuel d'utilisation</a>`)}
 
   ${acc('roles', '<span>ℹ️ Rôles et droits</span>', `
     <div class="card"><b style="font-size:13px;">Administrateur</b><p class="muted" style="font-size:13px;margin-top:4px;">Accès complet : matériel, membres, prêts, validations.</p></div>
