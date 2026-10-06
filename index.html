@@ -58,6 +58,10 @@
   p{margin:0;} a{color:var(--accent);}
   button{font-family:var(--font-body);cursor:pointer;border:none;}
   input,select,textarea{font-family:var(--font-body);}
+  .acc-banner{padding:9px 16px;font-size:12.5px;line-height:1.4;border-bottom:1px solid var(--border);}
+  .acc-ro{background:rgba(220,60,60,.14);color:var(--text);}
+  .acc-warn{background:rgba(240,170,40,.16);color:var(--text);}
+  .acc-info{background:rgba(80,140,220,.12);color:var(--text);}
   .topbar{position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:1px solid var(--border);padding:10px 16px 9px;display:flex;align-items:center;justify-content:space-between;}
   .topbar .brand{display:flex;flex-direction:row;align-items:center;}
   .topbar .brand small{color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:1px;}
@@ -254,7 +258,25 @@ const ROLES = {
   assistant:{label:'Assistant', can:['exporter','gererPret']},
   lecteur:{label:'Lecteur', can:['exporter']}
 };
-function can(action){ return (ROLES[state.role]?.can || []).includes(action); }
+function can(action){
+  // Abonnement : en lecture seule, plus aucune action d'écriture (lecture, export et gestion des membres restent possibles)
+  if(state.access && state.access.mode==='readonly' && action!=='exporter' && action!=='gererMembres') return false;
+  return (ROLES[state.role]?.can || []).includes(action);
+}
+async function loadAccess(){
+  state.access = null;
+  try{ const { data } = await sb.rpc('unit_access', { p_unit: state.unit.id }); state.access = data || null; }catch(e){ state.access = null; }
+}
+function renderAccessBanner(){
+  const a = state.access; if(!a) return '';
+  const fd = d=>{ try{ return new Date(d+'T12:00:00').toLocaleDateString('fr-FR'); }catch(e){ return d; } };
+  const adm = state.role==='administrateur';
+  const who = adm ? 'Contacte le support Optepia pour régulariser.' : "Préviens l'administrateur de ton unité.";
+  if(a.mode==='readonly') return `<div class="acc-banner acc-ro"><b>🔒 Unité en lecture seule.</b> L'abonnement n'est plus actif : tu peux consulter et exporter toutes les données, mais plus en ajouter ni en modifier. ${who} Rien n'est supprimé.</div>`;
+  if(a.mode==='grace') return `<div class="acc-banner acc-warn"><b>⚠️ Abonnement à régulariser.</b> ${a.status==='essai'?"La période d'essai est terminée":"Un paiement est en attente"} : accès complet maintenu jusqu'au ${fd(a.until)}${a.days_left!=null?` (J-${a.days_left})`:''}, puis lecture seule. ${who}</div>`;
+  if(a.status==='essai' && a.until && a.days_left!=null && a.days_left<=7) return `<div class="acc-banner acc-info">Période d'essai : il reste ${a.days_left} jour${a.days_left>1?'s':''} (jusqu'au ${fd(a.until)}).</div>`;
+  return '';
+}
 function uid(){ return Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4); }
 function genUUID(){
   if(window.crypto && crypto.randomUUID) return crypto.randomUUID();
@@ -366,7 +388,7 @@ async function loadUnitContext(){
 }
 async function selectMembership(m){
   state.unit = m.units; state.role = m.role; state.myMemberId = m.id; state.myDisplayName = m.display_name; state.activeMembershipId = m.id; state.myAvatarUrl = m.avatar_url || null;
-  await refreshAll();
+  await Promise.all([loadAccess(), refreshAll()]);
   state.view='home';
   render();
 }
@@ -1249,7 +1271,7 @@ function renderTopbar(){
       <small style="color:var(--text-muted);font-size:11px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(state.myDisplayName||'')} · ${esc(ROLES[state.role].label)}</small>
     </div>
     <img class="hd-logo" src="logo-mark.png" alt="Optepia">
-  </div>`;
+  </div>${renderAccessBanner()}`;
 }
 function renderNav(){
   const v = state.view;

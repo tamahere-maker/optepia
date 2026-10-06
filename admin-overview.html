@@ -833,7 +833,7 @@ function renderUnitsResults(units){
             <div class="muted" style="font-size:11px;">${act}${bk?' · '+bk:''}</div>
           </div>
         </div>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;">${bl?`<span class="badge ${bl[1]}">${bl[0]}</span>`:''}<span class="muted">›</span></div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;">${bl?`<span class="badge ${bl[1]}">${bl[0]}</span>`:''}${b&&accessOf(b).mode!=='full'?`<span class="badge ${accessOf(b).mode==='grace'?'badge-warn':'badge-danger'}">${accessOf(b).mode==='grace'?'Grâce':'Lecture seule'}</span>`:''}<span class="muted">›</span></div>
       </div>
     </div>`;
   }).join('');
@@ -846,11 +846,47 @@ function openUnit(id){ state.unitDetailId=id; state.unitTab='materiel'; state.vi
 function setUnitTab(t){ state.unitTab=t; render(); }
 
 /* ----- détail d'une unité ----- */
+const GRACE_DAYS = 14; // doit rester identique à unit_access() en SQL
+function accessOf(b){
+  if(!b) return {mode:'full', label:'Accès complet (aucun abonnement renseigné)'};
+  const today = new Date(); today.setHours(0,0,0,0);
+  const D = x=>{ const d=new Date(String(x).slice(0,10)+'T00:00:00'); return d; };
+  const add = (x,n)=>{ const d=D(x); d.setDate(d.getDate()+n); return d; };
+  const f = d=>d.toLocaleDateString('fr-FR');
+  if(b.status==='actif') return {mode:'full', label:'Accès complet'};
+  if(b.status==='essai'){
+    if(!b.trial_ends || today<=D(b.trial_ends)) return {mode:'full', label:'Accès complet'+(b.trial_ends?' (essai jusqu\'au '+f(D(b.trial_ends))+')':'')};
+    const g = add(b.trial_ends, GRACE_DAYS);
+    return today<=g ? {mode:'grace', label:'Période de grâce jusqu\'au '+f(g)} : {mode:'readonly', label:'Lecture seule (essai terminé)'};
+  }
+  if(b.status==='impaye'){
+    const g = b.grace_ends ? D(b.grace_ends) : add(b.updated_at||new Date(), GRACE_DAYS);
+    return today<=g ? {mode:'grace', label:'Période de grâce jusqu\'au '+f(g)} : {mode:'readonly', label:'Lecture seule (impayé)'};
+  }
+  return {mode:'readonly', label:'Lecture seule (résilié)'};
+}
+async function extendTrial(unitId, days){
+  const b = state.billing[unitId] || {};
+  const base = b.trial_ends && new Date(b.trial_ends) > new Date() ? new Date(b.trial_ends) : new Date();
+  base.setDate(base.getDate()+days);
+  const iso = base.toISOString().slice(0,10);
+  state.busy=true; render();
+  const { error } = await sb.from('unit_billing').upsert({ unit_id:unitId, plan:b.plan||'essai', status:'essai', trial_ends:iso, seats:b.seats??null, price_month:b.price_month??null, notes:b.notes||null }, { onConflict:'unit_id' });
+  state.busy=false;
+  if(error){ showErr(error.message); return; }
+  state.billing[unitId] = Object.assign({}, b, { status:'essai', trial_ends:iso });
+  const u = state.units.find(x=>x.id===unitId);
+  logAdmin('Essai prolongé', u?u.name:unitId, { jours:days, trial_ends:iso });
+  showErr('Essai prolongé jusqu\'au '+new Date(iso+'T12:00:00').toLocaleDateString('fr-FR'));
+}
 function renderBillingCard(u){
   const b = state.billing[u.id] || {};
+  const acc = accessOf(state.billing[u.id]);
+  const accCol = acc.mode==='full'?'var(--ok)':acc.mode==='grace'?'var(--warn)':'var(--danger)';
   const opt = (v,l,cur)=>`<option value="${v}" ${cur===v?'selected':''}>${l}</option>`;
   return `<div class="card">
-    <h3 style="color:var(--text);margin-bottom:10px;">Abonnement</h3>
+    <h3 style="color:var(--text);margin-bottom:6px;">Abonnement</h3>
+    <p style="font-size:13px;margin:0 0 12px;"><b>Accès de l'unité :</b> <span style="color:${accCol};">${acc.label}</span></p>
     ${state.sqlMissing?`<p class="muted" style="font-size:12px;">Indisponible tant que le SQL d'installation n'est pas exécuté.</p>`:`
     <div class="grid2">
       <div class="field"><label>Offre</label><input id="bl-plan" value="${esc(b.plan||'essai')}"></div>
@@ -861,7 +897,9 @@ function renderBillingCard(u){
       <div class="field"><label>Membres actuels</label><input value="${membersOf(u.id).length}" disabled></div>
     </div>
     <div class="field"><label>Notes</label><input id="bl-notes" value="${esc(b.notes||'')}"></div>
-    <button class="btn btn-primary" onclick="saveBilling('${u.id}')">Enregistrer</button>`}
+    <button class="btn btn-primary" onclick="saveBilling('${u.id}')">Enregistrer</button>
+    <div class="btn-row" style="margin-top:8px;"><button class="btn btn-ghost" onclick="extendTrial('${u.id}',14)">Prolonger l'essai de 14 j</button><button class="btn btn-ghost" onclick="extendTrial('${u.id}',30)">+30 j</button></div>
+    <p class="muted" style="font-size:11px;margin-top:8px;">Règles : essai → grâce 14 j → lecture seule ; impayé → grâce 14 j → lecture seule ; résilié → lecture seule ; actif → complet. La lecture et l'export restent toujours possibles, rien n'est supprimé.</p>`}
   </div>`;
 }
 async function saveBilling(unitId){
