@@ -248,6 +248,23 @@ async function doMfa(){
   await checkAdminAndLoad();
 }
 
+/* ----- place prise par le catalogue (lecture des tailles dans le bucket) ----- */
+async function loadCatStorage(){
+  state.catStorage = {loading:true};
+  try{
+    const out={fiches:0,photos:0,nf:0,np:0};
+    for(const dir of ['fiches','photos']){
+      for(let off=0; off<20000; off+=1000){
+        const { data, error } = await sb.storage.from(CAT_BUCKET).list(dir, {limit:1000, offset:off});
+        if(error) throw error;
+        (data||[]).forEach(o=>{ if(o && o.id){ const sz=(o.metadata&&o.metadata.size)||0; if(dir==='fiches'){ out.fiches+=sz; out.nf++; } else { out.photos+=sz; out.np++; } } });
+        if(!data || data.length<1000) break;
+      }
+    }
+    state.catStorage = out;
+  }catch(e){ state.catStorage = {error:e.message||'erreur'}; }
+  if(state.view==='units') render();
+}
 /* ---------------- Chargement ---------------- */
 async function loadAll(){
   const [unitsRes, membersRes, equipRes, statsRes, storageRes, emailsRes, billRes, actRes, uactRes, bkRes] = await Promise.all([
@@ -760,6 +777,12 @@ function renderResourceUsage(){
     <p class="muted" style="font-size:12px;margin:12px 0 2px;">Stockage fichiers (${s.storage_file_count} fichier(s))</p>
     <div class="row" style="font-size:13px;"><b>${formatBytes(s.storage_total_bytes)}</b><span class="muted">/ 1 Go (gratuit) · 100 Go (Pro)</span></div>
     ${renderUsageBar(s.storage_total_bytes, FREE_STORAGE)}
+    ${(()=>{ const c=state.catStorage;
+      if(c===undefined){ setTimeout(loadCatStorage,0); return ''; }
+      if(c.loading) return '<p class="muted" style="font-size:12px;margin-top:6px;">Calcul de la place du catalogue…</p>';
+      if(c.error) return '<p class="muted" style="font-size:12px;margin-top:6px;">Catalogue : taille indisponible ('+esc(c.error)+')</p>';
+      const tot=c.fiches+c.photos, pc=s.storage_total_bytes?Math.round(100*tot/s.storage_total_bytes):0;
+      return `<p style="font-size:12px;margin-top:8px;">📚 <b>Catalogue : ${formatBytes(tot)}</b> <span class="muted">(${pc} % du stockage)</span><br><span class="muted">${c.nf} fiche(s) technique(s) : ${formatBytes(c.fiches)} · ${c.np} photo(s) : ${formatBytes(c.photos)}</span></p>`; })()}
     <p class="muted" style="font-size:11px;margin-top:6px;">Bande passante Supabase non disponible ici — à vérifier dans Supabase (Reports). Hébergement : à consulter dans Cloudflare (Pages → Analytics).</p>
   </div>`;
 }
@@ -1154,12 +1177,14 @@ function fileToJpegBlob(file, maxDim){
 }
 function newId(){ return (crypto.randomUUID?crypto.randomUUID():'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return (c==='x'?r:(r&3|8)).toString(16);})); }
 async function catUploadPhoto(id, file){
+  state.catStorage = undefined;
   const blob = await fileToJpegBlob(file, 900); const path = `photos/${id}.jpg`;
   const { error } = await sb.storage.from(CAT_BUCKET).upload(path, blob, {upsert:true, contentType:'image/jpeg'});
   if(error) throw error; return path;
 }
 async function catUploadFiche(id, file){
   if(file.size > 15*1024*1024) throw new Error('PDF trop lourd (15 Mo max) : '+file.name);
+  state.catStorage = undefined;
   const path = `fiches/${id}.pdf`;
   const { error } = await sb.storage.from(CAT_BUCKET).upload(path, file, {upsert:true, contentType:'application/pdf'});
   if(error) throw error; return path;
@@ -1236,7 +1261,7 @@ function catAskDelete(id){
       const files=[c.photo_path,c.fiche_path].filter(Boolean);
       const { error } = await sb.from('equipment_catalog').delete().eq('id',id);
       if(error) throw error;
-      if(files.length) await sb.storage.from(CAT_BUCKET).remove(files);
+      if(files.length){ await sb.storage.from(CAT_BUCKET).remove(files); state.catStorage = undefined; }
       logAdmin('Catalogue : référence supprimée', c.marque+' — '+c.designation);
       await loadCatalog();
     }) });
