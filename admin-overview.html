@@ -421,7 +421,7 @@ async function backupUnits(ids, opts){
   for(const it of (data||[])){
     const u = state.units.find(x=>x.id===it.unit_id);
     const m = await mirrorFiles(it.backup_id, it.file_paths||[], u?u.name:'Unité');
-    res.push({ unit_id:it.unit_id, name:u?u.name:'', backup_id:it.backup_id, total:m.total, failed:m.failed });
+    res.push({ unit_id:it.unit_id, name:u?u.name:'', backup_id:it.backup_id, total:m.total, failed:m.failed, paths:it.file_paths||[] });
   }
   setProgress('Nettoyage des anciennes sauvegardes…');
   await pruneBackups();
@@ -961,10 +961,17 @@ function askDeleteUnit(unitId){
       setProgress('Suppression de l\'unité…');
       const { error } = await sb.rpc('delete_unit_as_admin', { target_unit_id: unitId });
       if(error) throw error;
+      // Supabase interdit le DELETE direct sur storage.objects : les fichiers sont supprimés par l'API Storage
+      const paths = res[0].paths || []; let rmFailed = 0;
+      for(let i=0;i<paths.length;i+=100){
+        setProgress(`Suppression des fichiers ${Math.min(i+100,paths.length)}/${paths.length}…`);
+        const { error: e2 } = await sb.storage.from('registre-materiel').remove(paths.slice(i,i+100));
+        if(e2) rmFailed += Math.min(100, paths.length-i);
+      }
       logAdmin('Unité supprimée', u.name, { unit_id:unitId, backup_id:res[0].backup_id });
       state.view='units';
       await loadAll();
-      return { title:'Unité supprimée', body:`<p>« ${esc(u.name)} » a été supprimée. Elle reste restaurable depuis l'onglet <b>Sauvegardes</b>.</p>` };
+      return { title:'Unité supprimée', body:`<p>« ${esc(u.name)} » a été supprimée. Elle reste restaurable depuis l'onglet <b>Sauvegardes</b>.</p>${rmFailed?`<p class="muted" style="font-size:12px;">${rmFailed} fichier(s) n'ont pas pu être effacés du stockage (ils restent dans la sauvegarde).</p>`:''}` };
     }) });
 }
 function renderUnitEquipment(equipment){
