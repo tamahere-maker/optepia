@@ -697,7 +697,8 @@ function renderAlerts(){
   const s = state.platformStats;
   if(!state.mfaEnrolled) A.push({lvl:'warn', t:"Double authentification non activée sur ton compte admin", d:"Active-la dans le profil de l'application : l'accès admin est très sensible."});
   if(s){
-    const p = s.storage_total_bytes/(1024*1024*1024);
+    const catB = (state.catStorage && !state.catStorage.loading && !state.catStorage.error) ? state.catStorage.fiches+state.catStorage.photos : 0;
+    const p = (s.storage_total_bytes+catB)/(1024*1024*1024);
     if(p>0.7) A.push({lvl:p>0.9?'danger':'warn', t:`Stockage fichiers à ${(p*100).toFixed(0)} % de 1 Go`, d:'Passe en Supabase Pro ou nettoie les fichiers inutiles.'});
     const d = s.db_size_bytes/(500*1024*1024);
     if(d>0.7) A.push({lvl:d>0.9?'danger':'warn', t:`Base de données à ${(d*100).toFixed(0)} % de 500 Mo`, d:'Les sauvegardes automatiques en font partie.'});
@@ -759,6 +760,13 @@ function renderUnitsList(){
   <div class="foot-brand"><img src="logo-admin-wordmark.png" alt="Optepia"></div>
   `;
 }
+function renderStackedBar(parts, capBytes){
+  const total = parts.reduce((t,x)=>t+x.bytes,0);
+  const over = capBytes && total/capBytes>0.9;
+  let used=0;
+  const segs = parts.map(x=>{ const w = capBytes? Math.min(100-used, (x.bytes/capBytes)*100) : 0; used+=w; return `<div style="width:${w.toFixed(1)}%;height:100%;background:${x.color};"></div>`; }).join('');
+  return `<div style="display:flex;background:var(--surface2);border-radius:6px;height:8px;overflow:hidden;margin:6px 0 4px;${over?'outline:1px solid var(--danger);':''}">${segs}</div>`;
+}
 function renderUsageBar(usedBytes, capBytes){
   const pct = capBytes ? Math.min(100, (usedBytes/capBytes)*100) : 0;
   const color = pct>90?'var(--danger)':pct>70?'var(--warn)':'var(--accent)';
@@ -774,15 +782,16 @@ function renderResourceUsage(){
     <p class="muted" style="font-size:12px;margin-bottom:2px;">Base de données</p>
     <div class="row" style="font-size:13px;"><b>${formatBytes(s.db_size_bytes)}</b><span class="muted">/ 500 Mo (gratuit) · 8 Go (Pro)</span></div>
     ${renderUsageBar(s.db_size_bytes, FREE_DB)}
-    <p class="muted" style="font-size:12px;margin:12px 0 2px;">Stockage fichiers (${s.storage_file_count} fichier(s))</p>
-    <div class="row" style="font-size:13px;"><b>${formatBytes(s.storage_total_bytes)}</b><span class="muted">/ 1 Go (gratuit) · 100 Go (Pro)</span></div>
-    ${renderUsageBar(s.storage_total_bytes, FREE_STORAGE)}
-    ${(()=>{ const c=state.catStorage;
-      if(c===undefined){ setTimeout(loadCatStorage,0); return ''; }
-      if(c.loading) return '<p class="muted" style="font-size:12px;margin-top:6px;">Calcul de la place du catalogue…</p>';
-      if(c.error) return '<p class="muted" style="font-size:12px;margin-top:6px;">Catalogue : taille indisponible ('+esc(c.error)+')</p>';
-      const tot=c.fiches+c.photos, pc=s.storage_total_bytes?Math.round(100*tot/s.storage_total_bytes):0;
-      return `<p style="font-size:12px;margin-top:8px;">📚 <b>Catalogue : ${formatBytes(tot)}</b> <span class="muted">(${pc} % du stockage)</span><br><span class="muted">${c.nf} fiche(s) technique(s) : ${formatBytes(c.fiches)} · ${c.np} photo(s) : ${formatBytes(c.photos)}</span></p>`; })()}
+    ${(()=>{ const c=state.catStorage, ok=c&&!c.loading&&!c.error;
+      if(c===undefined) setTimeout(loadCatStorage,0);
+      const catB = ok? c.fiches+c.photos : 0, tot = s.storage_total_bytes+catB;
+      const pc = Math.round(100*tot/FREE_STORAGE);
+      const nfiles = s.storage_file_count + (ok? c.nf+c.np : 0);
+      return `<p class="muted" style="font-size:12px;margin:12px 0 2px;">Stockage fichiers (${nfiles} fichier(s))</p>
+      <div class="row" style="font-size:13px;"><b>${formatBytes(tot)}</b><span class="muted">/ 1 Go (gratuit) · 100 Go (Pro) · ${pc} %</span></div>
+      ${renderStackedBar([{bytes:s.storage_total_bytes,color:'var(--accent)'},{bytes:catB,color:'#4DA3FF'}], FREE_STORAGE)}
+      <p style="font-size:12px;margin-top:6px;line-height:1.6;"><span style="color:var(--accent);">●</span> Unités (photos, fiches, sauvegardes) : <b>${formatBytes(s.storage_total_bytes)}</b><br>
+      <span style="color:#4DA3FF;">●</span> Catalogue : ${ok?`<b>${formatBytes(catB)}</b> <span class="muted">(${c.nf} fiche(s) : ${formatBytes(c.fiches)} · ${c.np} photo(s) : ${formatBytes(c.photos)})</span>`:(c&&c.error?'<span class="muted">indisponible ('+esc(c.error)+')</span>':'<span class="muted">calcul…</span>')}</p>`; })()}
     <p class="muted" style="font-size:11px;margin-top:6px;">Bande passante Supabase non disponible ici — à vérifier dans Supabase (Reports). Hébergement : à consulter dans Cloudflare (Pages → Analytics).</p>
   </div>`;
 }
