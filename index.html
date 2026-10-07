@@ -1285,7 +1285,7 @@ function renderTopbar(){
       <h2 onclick="openUnitSwitcher()" style="margin:0;line-height:24px;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;">${esc(state.unit.name)}</h2>
       <small style="color:var(--text-muted);font-size:11px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(state.myDisplayName||'')} · ${esc(ROLES[state.role].label)}</small>
     </div>
-    <img class="hd-logo" src="logo-mark.png" alt="Optepia">
+    <a href="https://optepia.fr" target="_blank" rel="noopener" title="Site optepia.fr" style="display:flex;flex-shrink:0;"><img class="hd-logo" src="logo-mark.png" alt="Optepia"></a>
   </div>${renderAccessBanner()}`;
 }
 function renderNav(){
