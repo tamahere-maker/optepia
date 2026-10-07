@@ -1256,12 +1256,13 @@ function renderSupThread(){
     <p class="muted" style="font-size:12px;margin-bottom:6px;"><b>${m.is_staff?'Support (toi)':esc(t.author_name||'Membre')}</b> · ${fmtDateTime(m.created_at)}</p>
     <div style="white-space:pre-wrap;font-size:14px;">${m.body==='(pièce jointe)'?'':esc(m.body)}</div>${supAttachHtml(m)}</div>`).join('')}
   ${supPurgeNote(t)}
-  <div class="field" style="margin-top:12px;"><label>Réponse (envoyée aussi par e-mail à l'auteur)</label><textarea id="sup-reply" rows="5" maxlength="5000" oninput="state.supReply=this.value" style="width:100%;">${esc(state.supReply||'')}</textarea></div>
+  <div class="field" style="margin-top:12px;"><label>Réponse (l'auteur est prévenu par e-mail, sans le texte, et la lit dans l'application)</label><textarea id="sup-reply" rows="5" maxlength="5000" oninput="state.supReply=this.value" style="width:100%;">${esc(state.supReply||'')}</textarea></div>
   ${supFilesPicker()}
-  <button class="btn btn-primary" ${state.busy?'disabled':''} onclick="sendSupReply()">Envoyer la réponse</button>
+  ${t.status==='closed'?'':`<button class="btn btn-primary" ${state.busy?'disabled':''} onclick="sendSupReply()">Envoyer la réponse</button>
+  <button class="btn btn-secondary" style="margin-top:8px;" ${state.busy?'disabled':''} onclick="sendSupReply(true)">Envoyer et clore (le client reçoit tout l'échange)</button>`}
   <button class="btn btn-secondary" style="margin-top:8px;" onclick="setSupStatus('${t.status==='closed'?'open':'closed'}')">${t.status==='closed'?'Rouvrir le ticket':'Clore le ticket'}</button>`;
 }
-async function sendSupReply(){
+async function sendSupReply(closeAfter){
   supSyncDraft();
   let body=(state.supReply||'').trim(); if(!body && !(state.supFiles||[]).length) return showErr('Écris une réponse');
   if(!body) body='(pièce jointe)';
@@ -1271,8 +1272,9 @@ async function sendSupReply(){
   const {data:m,error}=await sb.from('support_messages').insert({ticket_id:state.supOpen,body,attachments:atts}).select().single();
   state.busy=false;
   if(error){ render(); return showErr(error.message); }
-  try{ await sb.functions.invoke('support-events',{body:{message_id:m.id}}); }catch(e){ console.warn(e); }
-  logAdmin('Réponse support', state.supOpen, {});
+  if(closeAfter){ const {error:ce}=await sb.from('support_tickets').update({status:'closed'}).eq('id',state.supOpen); if(ce) showErr('Clôture impossible : '+ce.message); }
+  try{ await sb.functions.invoke('support-events',{body:{message_id:m.id, close:!!closeAfter}}); }catch(e){ console.warn(e); }
+  logAdmin(closeAfter?'Réponse support + clôture':'Réponse support', state.supOpen, {});
   state.supReply=''; state.supFiles=[]; await loadSupport(); await openSupTicket(state.supOpen);
 }
 async function setSupStatus(st){
