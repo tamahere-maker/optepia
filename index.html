@@ -2388,14 +2388,14 @@ function renderInspectionDoc(){
       <table class="it"><thead><tr><th>Type</th><th>Matériel</th><th>Emprunteur / mission</th><th>Sortie</th><th>Retour prévu</th><th>Retour</th><th>État au retour</th><th>Statut</th></tr></thead><tbody>
       ${ls.map(x=>`<tr><td>${x.l.type==='mission'?'Mission':'Prêt'}</td><td>${nameOf(x.e)}</td><td>${nm(x.l.borrower_name)}</td><td>${fmtDate(x.l.checkout_date)}</td><td>${fmtDate(x.l.expected_return_date)}</td><td>${fmtDate(x.l.return_date)}</td><td>${x.l.return_condition==='endommage'?'Endommagé':x.l.return_condition==='reserve'?'Avec réserve':x.l.return_condition?'Bon état':'—'}</td><td>${stl(x.l)}</td></tr>`).join('')}</tbody></table>`}</div>`);
   }
-  sections.push(`<div class="isec${pb()}" style="margin-top:22px;"><table class="it"><tr><th style="width:50%;">Établi par</th><th>Vu par le chef d’unité</th></tr><tr><td style="height:70px;">Nom : ${nm(state.myDisplayName)}<br>Date : ${now.toLocaleDateString('fr-FR')}<br>Signature :</td><td>Nom :<br>Date :<br>Signature :</td></tr></table>
-    <p style="color:#888;font-size:10px;margin-top:10px;">Document généré par Optepia à partir du registre de l’unité. Les statuts sont calculés à la date d’édition (contrôle annuel ; matériel réformé conservé 5 ans). Réf. ${docId}.</p></div>`);
   if(B.journal){
     const rows = I.audit.filter(a=>inPeriod(a.created_at) && (catOfAction(a.action)==='Matériel' || /Contrôle/i.test(a.action))).slice(0,500);
     sections.push(`<div class="isec${pb()}">${H('Extrait du journal')}<p style="color:#666;margin:0 0 6px;">Actions sur le matériel et contrôles — ${esc(periodTxt)}. Le journal est tenu par le serveur et ne peut être modifié par les utilisateurs.</p>${rows.length===0?none('Aucune action sur la période.'):`
       <table class="it"><thead><tr><th style="width:15%;">Date</th><th style="width:14%;">Personne</th><th style="width:20%;">Action</th><th style="width:20%;">Concerne</th><th>Détail</th></tr></thead><tbody>
       ${rows.map(a=>`<tr><td>${esc(fmtDateTime(a.created_at))}</td><td>${nm(a.user_name)}</td><td>${esc(a.action)}</td><td>${esc(a.target_label||'—')}</td><td>${esc(journalDetailText(a))}</td></tr>`).join('')}</tbody></table>`}</div>`);
   }
+  sections.push(`<div class="isec${pb()}" style="margin-top:22px;"><table class="it"><tr><th style="width:50%;">Établi par</th><th>Vu par le chef d’unité</th></tr><tr><td style="height:70px;">Nom : ${nm(state.myDisplayName)}<br>Date : ${now.toLocaleDateString('fr-FR')}<br>Signature :</td><td>Nom :<br>Date :<br>Signature :</td></tr></table>
+    <p style="color:#888;font-size:10px;margin-top:10px;">Document généré par Optepia à partir du registre de l’unité. Les statuts sont calculés à la date d’édition (contrôle annuel ; matériel réformé conservé 5 ans). Réf. ${docId}.</p></div>`);
   if(B.fiches){
     const fh = H('Fiches individuelles');
     if(eq.length===0) sections.push(`<div class="isec">${fh}${none('Aucun matériel.')}</div>`);
