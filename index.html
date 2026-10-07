@@ -2153,25 +2153,53 @@ function journalFiltered(){
     (!f.user || j.user_name===f.user) &&
     (!f.cat || catOfAction(j.action)===f.cat) &&
     (!days || (now - new Date(j.created_at).getTime()) <= days*86400000) &&
-    (!q || `${j.action} ${j.target_label||''} ${j.user_name||''}`.toLowerCase().includes(q)));
+    (!q || `${j.action} ${j.target_label||''} ${j.user_name||''} ${journalDetailText(j)}`.toLowerCase().includes(q)));
 }
 function journalResultsHtml(){
   const list = journalFiltered();
   const filtered = state.jf.user || state.jf.cat || state.jf.period || state.jf.q;
   return `<p class="muted" style="font-size:12px;margin-bottom:8px;">${list.length} action${list.length>1?'s':''}${filtered?' (filtrées)':''}${state.journalHasMore?' — les plus récentes sont chargées':''}</p>`
     + (list.length===0?'<p class="muted">Aucune action ne correspond.</p>':list.map(j=>`
-    <div class="journal-item">
-      <div class="row"><b style="font-size:14px;">${esc(j.action)}</b><span class="muted" style="font-size:11px;">${fmtDateTime(j.created_at)}</span></div>
+    <div class="journal-item" style="cursor:pointer;" onclick="openJournalDetail('${j.id}')">
+      <div class="row"><b style="font-size:14px;">${esc(j.action)}</b><span class="muted" style="font-size:11px;">${fmtDateTime(j.created_at)} ›</span></div>
       <p class="muted" style="font-size:13px;margin-top:2px;">${esc(j.user_name)}${j.target_label?' · '+esc(j.target_label):''}</p>
+      ${j.details&&j.details.motif?`<p style="font-size:12px;margin-top:3px;"><b>Motif :</b> ${esc(j.details.motif)}</p>`:''}
     </div>`).join(''))
     + (state.journalHasMore?`<button class="btn btn-ghost" style="margin-top:10px;" onclick="journalMore()">Charger les actions plus anciennes</button>`:'');
+}
+function journalDetailText(j){
+  const d = j.details||{}; const parts=[];
+  if(d.motif) parts.push('Motif : '+d.motif);
+  (d.changes||[]).forEach(c=>parts.push(c.f+' : '+c.o+' → '+c.n));
+  Object.keys(d.info||{}).forEach(k=>parts.push(k+' : '+d.info[k]));
+  return parts.join(' | ');
+}
+function openJournalDetail(id){
+  const j = state.journal.find(x=>x.id===id); if(!j) return;
+  const d = j.details||{};
+  const row = (k,v)=>`<div style="display:flex;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span class="muted" style="flex:0 0 42%;">${esc(k)}</span><span style="flex:1;word-break:break-word;">${esc(v)}</span></div>`;
+  const changes = (d.changes||[]).map(c=>`<div style="padding:7px 0;border-bottom:1px solid var(--border);font-size:13px;"><div class="muted" style="font-size:12px;">${esc(c.f)}</div><div><span style="text-decoration:line-through;opacity:.7;">${esc(c.o)}</span> → <b>${esc(c.n)}</b></div></div>`).join('');
+  const info = Object.keys(d.info||{}).map(k=>row(k, d.info[k])).join('');
+  const has = d.motif || changes || info;
+  const ov = document.createElement('div'); ov.className='sheet-ov';
+  ov.innerHTML = `<div class="sheet-box" style="max-height:85vh;overflow:auto;">
+    <h3 style="margin:0;color:var(--text);">${esc(j.action)}</h3>
+    ${row('Date', fmtDateTime(j.created_at))}${row('Par', j.user_name||'—')}${j.target_label?row('Concerne', j.target_label):''}
+    ${d.motif?`<div style="margin-top:6px;padding:10px;background:var(--surface2);border-radius:8px;font-size:13px;"><b>Motif</b><br>${esc(d.motif)}</div>`:''}
+    ${changes?`<div style="margin-top:6px;"><b style="font-size:13px;">Modifications</b>${changes}</div>`:''}
+    ${info}
+    ${has?'':'<p class="muted" style="font-size:12px;margin:6px 0 0;">Aucun détail supplémentaire n\'a été enregistré pour cette action (actions antérieures à cette fonctionnalité).</p>'}
+    <button class="btn btn-ghost" id="jd-close" style="margin-top:6px;">Fermer</button></div>`;
+  document.body.appendChild(ov);
+  const close=()=>ov.remove();
+  ov.querySelector('#jd-close').onclick=close; ov.addEventListener('click',ev=>{ if(ev.target===ov) close(); });
 }
 function refreshJournalResults(){ const el=document.getElementById('journal-results'); if(el) el.innerHTML = journalResultsHtml(); }
 function setJournalFilter(k,v){ state.jf[k]=v; refreshJournalResults(); }
 async function journalMore(){ state.journalLimit += 500; await loadJournal(); render(); }
 function exportJournalCsv(){
   const list = journalFiltered();
-  const rows = [['Date','Heure','Personne','Action','Détail']].concat(list.map(j=>{ const d=new Date(j.created_at); return [d.toLocaleDateString('fr-FR'), d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}), j.user_name||'', j.action||'', j.target_label||'']; }));
+  const rows = [['Date','Heure','Personne','Action','Détail','Précisions']].concat(list.map(j=>{ const d=new Date(j.created_at); return [d.toLocaleDateString('fr-FR'), d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}), j.user_name||'', j.action||'', j.target_label||'', journalDetailText(j)]; }));
   const csv = rows.map(r=>r.map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(';')).join(String.fromCharCode(10));
   const blob = new Blob([String.fromCharCode(0xFEFF)+csv], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob); const a=document.createElement('a');
@@ -2375,11 +2403,34 @@ function editEquip(id){
   _catP=null; loadCatalogOnce(); state.view='addEquip'; render();
 }
 function cancelAddEquip(){ state.view = equipDraft._editId ? 'detail' : 'list'; render(); }
+/* ---- Motif obligatoire (fenêtre en bas d'écran) ---- */
+function askReason(title, msg, okLabel){
+  return new Promise(resolve=>{
+    const ov = document.createElement('div'); ov.className = 'sheet-ov';
+    ov.innerHTML = `<div class="sheet-box">
+      <h3 style="margin:0;color:var(--text);">${esc(title)}</h3>
+      <p class="muted" style="font-size:13px;margin:0;">${msg}</p>
+      <textarea id="rsn-t" rows="3" maxlength="300" placeholder="Motif (obligatoire)" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px;font-size:15px;font-family:inherit;"></textarea>
+      <p id="rsn-e" style="color:var(--danger);font-size:12px;margin:0;display:none;">Indique un motif (3 caractères minimum).</p>
+      <button class="btn btn-danger" id="rsn-ok">${esc(okLabel||'Confirmer')}</button>
+      <button class="btn btn-ghost" id="rsn-no">Annuler</button></div>`;
+    document.body.appendChild(ov);
+    const t = ov.querySelector('#rsn-t'); setTimeout(()=>t.focus(), 50);
+    const done = v=>{ ov.remove(); resolve(v); };
+    ov.querySelector('#rsn-no').onclick = ()=>done(null);
+    ov.addEventListener('click', ev=>{ if(ev.target===ov) done(null); });
+    ov.querySelector('#rsn-ok').onclick = ()=>{ const v=t.value.trim(); if(v.length<3){ ov.querySelector('#rsn-e').style.display='block'; t.focus(); return; } done(v); };
+  });
+}
+const TRASH_DAYS = 7;
+function trashUnlockAt(e){ return e.deleted_at ? new Date(new Date(e.deleted_at).getTime() + TRASH_DAYS*86400000) : null; }
+function trashLocked(e){ const d = trashUnlockAt(e); return !!d && Date.now() < d.getTime(); }
 async function deleteEquip(id){
   const e = state.equipment.find(x=>x.id===id);
   const ri0 = reformInfo(e);
-  if(!confirm("Déplacer cette fiche vers la corbeille ? Tu pourras la restaurer depuis la corbeille de l'onglet Matériel."+(ri0&&ri0.locked?"\n\nMatériel réformé : la fiche restera conservée jusqu'au "+fmtDate(ri0.until)+" (5 ans)":""))) return;
-  const { error } = await sb.from('equipment').update({deleted_at: new Date().toISOString()}).eq('id', id);
+  const reason = await askReason('Supprimer « '+(e?e.designation:'ce matériel')+' » ?', "La fiche ira à la corbeille : tu pourras la restaurer, et elle ne pourra être supprimée définitivement qu'après "+TRASH_DAYS+" jours."+(ri0&&ri0.locked?" Matériel réformé : la fiche restera conservée jusqu'au "+fmtDate(ri0.until)+" (5 ans).":""), 'Mettre à la corbeille');
+  if(!reason) return;
+  const { error } = await sb.from('equipment').update({deleted_at: new Date().toISOString(), delete_reason: reason}).eq('id', id);
   if(error){ showToast(error.message); return; }
   await logAction('Matériel mis à la corbeille', e.designation);
   await refreshAll(); state.view='list'; render();
@@ -2397,6 +2448,7 @@ async function permanentlyDeleteEquip(id){
   const e = state.equipment.find(x=>x.id===id);
   const ri = reformInfo(e);
   if(ri && ri.locked){ alert(`Ce matériel a été réformé le ${fmtDate(ri.date)}.\n\nIl doit être conservé jusqu'au ${fmtDate(ri.until)} (5 ans) en cas de contrôle : suppression définitive impossible avant cette date.`); return; }
+  if(e && trashLocked(e)){ alert(`Suppression définitive possible à partir du ${fmtDate(trashUnlockAt(e).toISOString())} (${TRASH_DAYS} jours après la mise à la corbeille).`); return; }
   if(!confirm(`Supprimer DÉFINITIVEMENT « ${e?e.designation:''} » ? Impossible à annuler.`)) return;
   const { error } = await sb.from('equipment').delete().eq('id', id);
   if(error){ showToast(error.message); return; }
@@ -2409,7 +2461,7 @@ function renderTrash(){
   return `
   <div class="backlink" onclick="goto('list')">‹ Retour au matériel</div>
   <h2>Corbeille</h2>
-  <p class="muted" style="margin-bottom:16px;">Le matériel supprimé reste ici jusqu'à restauration ou suppression définitive.</p>
+  <p class="muted" style="margin-bottom:16px;">Le matériel supprimé reste ici jusqu'à restauration. La suppression définitive n'est possible qu'après ${TRASH_DAYS} jours, par un administrateur.</p>
   ${trashed.length===0?'<div class="empty">La corbeille est vide.</div>':trashed.map(e=>`
     <div class="card">
       <div class="row">
@@ -2418,21 +2470,24 @@ function renderTrash(){
           <div>
             <div style="font-weight:600;font-size:14px;">${esc(e.designation)||'—'}</div>
             <div class="muted" style="font-size:12px;">${esc(e.marque)||'—'} · supprimé le ${fmtDate(e.deleted_at)}</div>
+            <div style="font-size:12px;margin-top:3px;"><b>Motif :</b> ${e.delete_reason?esc(e.delete_reason):'<span class="muted">non renseigné (suppression antérieure)</span>'}</div>
           </div>
         </div>
       </div>
       <div class="btn-row" style="margin-top:10px;">
         <button class="btn btn-secondary" onclick="restoreEquip('${e.id}')">Restaurer</button>
-        ${can('supprimerMateriel')?((reformInfo(e)||{}).locked?`<span class="muted" style="font-size:12px;align-self:center;">🔒 Réformé : conservé jusqu'au ${fmtDate(reformInfo(e).until)}</span>`:`<button class="btn btn-danger" onclick="permanentlyDeleteEquip('${e.id}')">Supprimer définitivement</button>`):''}
+        ${can('supprimerMateriel')?((reformInfo(e)||{}).locked?`<span class="muted" style="font-size:12px;align-self:center;">🔒 Réformé : conservé jusqu'au ${fmtDate(reformInfo(e).until)}</span>`:(trashLocked(e)?`<span class="muted" style="font-size:12px;align-self:center;">⏳ Suppression définitive possible à partir du ${fmtDate(trashUnlockAt(e).toISOString())}</span>`:`<button class="btn btn-danger" onclick="permanentlyDeleteEquip('${e.id}')">Supprimer définitivement</button>`)):''}
       </div>
     </div>`).join('')}
   `;
 }
 async function proposeDeleteEquip(id){
   const e = state.equipment.find(x=>x.id===id);
-  if(!confirm('Proposer la suppression de cette fiche ? Un administrateur devra valider.')) return;
+  const reason = await askReason('Proposer la suppression ?', 'Un administrateur devra valider. Indique pourquoi cette fiche doit être supprimée.', 'Proposer la suppression');
+  if(!reason) return;
   const { error } = await sb.from('change_requests').insert({
-    unit_id: state.unit.id, equipment_id: id, type:'delete', proposed_by: state.session.user.id, proposed_by_name: state.myDisplayName
+    unit_id: state.unit.id, equipment_id: id, type:'delete', proposed_by: state.session.user.id, proposed_by_name: state.myDisplayName,
+    proposed_data: { designation: e?e.designation:null, motif: reason }
   });
   if(error){ showToast(error.message); return; }
   await logAction('Suppression proposée', e?e.designation:'');
@@ -2444,7 +2499,9 @@ async function approveChangeRequest(id){
   if(!cr) return;
   try{
     if(cr.type==='delete'){
-      const { error } = await sb.from('equipment').update({deleted_at: new Date().toISOString()}).eq('id', cr.equipment_id);
+      let motif = cr.proposed_data && cr.proposed_data.motif;
+      if(!motif){ motif = await askReason('Valider la suppression ?', "Cette proposition n'a pas de motif : indique celui qui sera enregistré.", 'Valider la suppression'); if(!motif) return; }
+      const { error } = await sb.from('equipment').update({deleted_at: new Date().toISOString(), delete_reason: motif}).eq('id', cr.equipment_id);
       if(error) throw error;
     } else {
       const { error } = await sb.from('equipment').update(Object.assign({}, cr.proposed_data, {
