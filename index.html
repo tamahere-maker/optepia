@@ -75,7 +75,7 @@
   .sheet-t th,.sheet-t td{border:1px solid #c8c8c8;padding:6px 8px;text-align:left;vertical-align:top;}
   .sheet-t th{background:#f2f2f2;font-weight:600;}
   @media print{
-    html,body{background:#fff !important;}
+    html,body{background:#fff !important;height:auto !important;min-height:0 !important;overflow:visible !important;padding-bottom:0 !important;}
     .topbar,.navbar,.noprint,.toast{display:none !important;}
     main{padding:0 !important;max-width:none !important;}
     .sheet{border-radius:0;padding:0;margin:0;}
@@ -1290,6 +1290,8 @@ function renderView(){
   switch(state.view){
     case 'home': return renderHome();
     case 'loanSheet': return renderLoanSheet();
+    case 'inspection': return renderInspection();
+    case 'inspectionDoc': return renderInspectionDoc();
     case 'batchControl': return renderBatchControl();
     case 'list': return renderList();
     case 'trash': return renderTrash();
@@ -1533,7 +1535,7 @@ function renderListResults(){
       const worst = g.some(e=>statusOf(e).cls==='badge-danger') ? 'badge-danger' : g.some(e=>statusOf(e).cls==='badge-warn') ? 'badge-warn' : 'badge-ok';
       const worstLabel = worst==='badge-danger'?'À vérifier':worst==='badge-warn'?'À surveiller':'Conforme';
       return `
-      <div class="card tap" onclick="state.groupFilter='${k.replace(/'/g,"\\'")}'; render();">
+      <div class="card tap" onclick="state.groupFilter='${k.replace(/'/g,"\'")}'; render();">
         <div class="row">
           <div class="row" style="gap:12px;">
             ${first.photo_url?`<img class="thumb" src="${imgSrc(first.photo_url)}">`:`<div class="thumb"></div>`}
@@ -2230,6 +2232,215 @@ function renderJournalView(){
   `;
 }
 
+/* ---- Dossier d'inspection (HSIE) : export PDF par impression ---- */
+const INSP_BLOCKS = [
+  ['synth','Synthèse chiffrée',true],
+  ['registre','Registre complet, par famille',true],
+  ['attention','Points d’attention (contrôles dépassés, fins de vie…)',true],
+  ['rebut','Matériel réformé et supprimé (rebut)',true],
+  ['controles','Historique des contrôles',true],
+  ['prets','Prêts et missions',false],
+  ['fiches','Fiches individuelles (une page par EPI)',false],
+  ['journal','Extrait du journal (actions sur le matériel)',false]
+];
+function newInsp(){ const b={}; INSP_BLOCKS.forEach(x=>{ b[x[0]]=x[2]; }); return { blocks:b, famille:'', months:'12', hideNames:false, signatures:false, photos:false, audit:[], generatedAt:null }; }
+function openInspection(){ if(!state.insp) state.insp=newInsp(); state.insp.generatedAt=null; state.view='inspection'; render(); window.scrollTo(0,0); }
+function setInsp(k,v){ state.insp[k]=v; }
+function setInspBlock(k,v){ state.insp.blocks[k]=v; }
+function renderInspection(){
+  const I = state.insp;
+  const fams = Array.from(new Set(state.equipment.filter(e=>!e.deleted_at).map(e=>e.famille||'Sans famille'))).sort();
+  const sel = 'width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:11px 10px;font-size:14px;';
+  const chk = (label,checked,fn)=>`<label style="display:flex;gap:10px;align-items:flex-start;padding:7px 0;font-size:14px;cursor:pointer;"><input type="checkbox" class="ck" ${checked?'checked':''} onchange="${fn}" style="margin-top:2px;"><span>${label}</span></label>`;
+  return `
+  <div class="backlink" onclick="goto('export')">‹ Retour</div>
+  <h2>Dossier d'inspection (PDF)</h2>
+  <p class="muted" style="margin-bottom:14px;">Un dossier à présenter lors d'une inspection (HSIE) : état du parc, contrôles réalisés, matériel réformé. Choisis son contenu, puis « Enregistrer au format PDF » dans la fenêtre d'impression.</p>
+  <div class="card">
+    <div class="field"><label>Périmètre</label><select style="${sel}" onchange="setInsp('famille',this.value)"><option value="">Toute l'unité</option>${fams.map(f=>`<option value="${esc(f)}" ${I.famille===f?'selected':''}>${esc(f)}</option>`).join('')}</select></div>
+    <div class="field"><label>Période pour l'historique (contrôles, prêts, journal)</label><select style="${sel}" onchange="setInsp('months',this.value)">${[['3','3 derniers mois'],['6','6 derniers mois'],['12','12 derniers mois'],['24','24 derniers mois'],['0','Tout l\'historique']].map(o=>`<option value="${o[0]}" ${I.months===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></div>
+  </div>
+  <div class="card"><h3 style="margin:0 0 6px;color:var(--text);">Contenu</h3>
+    ${INSP_BLOCKS.map(b=>chk(b[1], I.blocks[b[0]], `setInspBlock('${b[0]}',this.checked)`)).join('')}
+  </div>
+  <div class="card"><h3 style="margin:0 0 6px;color:var(--text);">Options</h3>
+    ${chk('Masquer les noms de personnes (vérificateurs, emprunteurs, auteurs) — pour un envoi hors de l\'unité', I.hideNames, "setInsp('hideNames',this.checked)")}
+    ${chk('Inclure les signatures des contrôles', I.signatures, "setInsp('signatures',this.checked)")}
+    ${chk('Inclure les photos dans les fiches individuelles', I.photos, "setInsp('photos',this.checked)")}
+  </div>
+  <button class="btn btn-primary" ${state.busy?'disabled':''} onclick="buildInspection()">${state.busy?'<span class="spinner"></span>':'Générer le dossier'}</button>`;
+}
+async function buildInspection(){
+  const I = state.insp; state.busy=true; render();
+  try{
+    I.audit = [];
+    if(I.blocks.rebut || I.blocks.journal){
+      const { data, error } = await sb.from('audit_log').select('*').eq('unit_id', state.unit.id).order('created_at',{ascending:false}).limit(2000);
+      if(error) throw error;
+      I.audit = data || [];
+    }
+    I.generatedAt = new Date(); state.busy=false; state.view='inspectionDoc'; render(); window.scrollTo(0,0);
+  }catch(err){ state.busy=false; render(); showToast(err.message||'Erreur'); }
+}
+function inspStart(){ const m=parseInt(state.insp.months,10); if(!m) return null; const d=new Date(); d.setMonth(d.getMonth()-m); return d.toISOString().slice(0,10); }
+function inspNm(n){ return state.insp.hideNames ? '—' : (n||'—'); }
+function ctlLabel(s){ return s==='conforme'?'Conforme':s==='reserve'?'Conforme avec réserve':s==='reforme'?'Réformé':(s||'—'); }
+function lastCtl(e){ const cs=(e.controls||[]).slice().sort((a,b)=>b.date.localeCompare(a.date)); return cs[0]||null; }
+function stColor(l){ return l==='Conforme'?'#1a8f5f':(l==='Contrôle proche'||l==='Fin de vie proche'||l==='Jamais contrôlé')?'#b97800':'#c4243a'; }
+function renderInspectionDoc(){
+  const I = state.insp;
+  if(!I || !I.generatedAt) return `<div class="backlink" onclick="openInspection()">‹ Retour</div><div class="empty">Dossier non généré.</div>`;
+  const B = I.blocks, now = I.generatedAt, since = inspStart();
+  const inScope = e=>!I.famille || (e.famille||'Sans famille')===I.famille;
+  const eq = state.equipment.filter(e=>!e.deleted_at && inScope(e));
+  const trashed = state.equipment.filter(e=>e.deleted_at && inScope(e));
+  const byName = (a,b)=>((a.famille||'Sans famille').localeCompare(b.famille||'Sans famille')) || (a.designation||'').localeCompare(b.designation||'');
+  eq.sort(byName);
+  const reformed = eq.filter(isReformed);
+  const inService = eq.filter(e=>!isReformed(e));
+  const cnt = {}; inService.forEach(e=>{ const l=statusOf(e).label; cnt[l]=(cnt[l]||0)+1; });
+  const reserve = inService.filter(e=>{ const c=lastCtl(e); return c && c.statut==='reserve'; }).length;
+  const aJour = inService.filter(e=>['Conforme','Contrôle proche','Fin de vie proche'].includes(statusOf(e).label)).length;
+  const taux = inService.length ? Math.round(100*aJour/inService.length) : null;
+  const allCtl = []; eq.forEach(e=>(e.controls||[]).forEach(c=>allCtl.push({c,e})));
+  allCtl.sort((a,b)=>b.c.date.localeCompare(a.c.date));
+  const ctl12 = allCtl.filter(x=>daysUntil(x.c.date)>=-365).length;
+  const inPeriod = d=>!since || (''+d).slice(0,10)>=since;
+  const nm = x=>esc(inspNm(x));
+  const idStr = e=>[e.numero_serie&&('N° '+e.numero_serie), e.identification&&('ID '+e.identification)].filter(Boolean).map(esc).join('<br>')||'—';
+  const nameOf = e=>esc(e.designation||'—')+(e.marque?` <span style="color:#666;">${esc(e.marque)}</span>`:'');
+  const st = e=>{ if(isReformed(e)) return `<b style="color:#c4243a;">Réformé</b>`; const s=statusOf(e); return `<b style="color:${stColor(s.label)};">${esc(s.label)}</b>`; };
+  const sigImg = u=>u?`<img src="${imgSrc(u)}" onerror="imgFallback(this)" style="height:34px;max-width:110px;background:#fff;">`:'';
+  const periodTxt = since ? ('depuis le '+fmtDate(since)) : 'tout l’historique';
+  let n = 0; const H = t=>`<h2 class="ih">${++n}. ${t}</h2>`;
+  const none = t=>`<p style="color:#777;margin:4px 0 10px;">${t}</p>`;
+  const sections = [];
+
+  // Page de garde / en-tête
+  const docId = 'INS-'+String(state.unit.id).slice(0,6).toUpperCase()+'-'+now.toISOString().slice(0,10).replace(/-/g,'');
+  sections.push(`
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0A9FA0;padding-bottom:8px;margin-bottom:14px;">
+      <div style="display:flex;align-items:center;gap:12px;"><img src="logo-mark.png" alt="" style="height:44px;width:auto;"><div><div style="font-size:20px;font-weight:700;letter-spacing:2px;">OPTEPIA</div><div style="color:#555;">Registre du matériel de protection</div></div></div>
+      <div style="text-align:right;color:#555;font-size:11px;">Édité le ${now.toLocaleDateString('fr-FR')} à ${now.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}<br>par ${nm(state.myDisplayName)}<br>Réf. ${docId}</div>
+    </div>
+    <h1 style="font-size:21px;margin:0 0 4px;">Dossier de vérification des EPI</h1>
+    <div style="font-size:15px;margin-bottom:10px;"><b>${esc(state.unit.name)}</b>${I.famille?` — famille « ${esc(I.famille)} »`:''}</div>
+    <table class="it"><tr><th style="width:26%;">Situation au</th><td>${now.toLocaleDateString('fr-FR')}</td><th style="width:20%;">Périmètre</th><td>${I.famille?esc(I.famille):'Toute l’unité'}</td></tr>
+    <tr><th>Historique</th><td>${esc(periodTxt)}</td><th>Contenu</th><td>${INSP_BLOCKS.filter(b=>B[b[0]]).map(b=>esc(b[1].replace(/ \(.*\)$/,''))).join(' · ')}</td></tr></table>`);
+
+  if(B.synth){
+    const lines = [['Fiches actives (hors corbeille)', eq.length],['Matériel en service (hors réformé)', inService.length],
+      ['Réformé (rebut)', reformed.length],['Conforme', cnt['Conforme']||0],['Contrôle à faire sous 30 jours', cnt['Contrôle proche']||0],
+      ['Fin de vie proche (< 60 jours)', cnt['Fin de vie proche']||0],['Contrôle dépassé', cnt['Contrôle dépassé']||0],['Jamais contrôlé', cnt['Jamais contrôlé']||0],
+      ['Hors service (fin de vie dépassée)', cnt['Hors service']||0],['Dont dernier contrôle « conforme avec réserve »', reserve]];
+    sections.push(`<div class="isec">${H('Synthèse')}
+      <div style="display:flex;gap:10px;margin:0 0 10px;">
+        <div class="kpi"><b>${taux===null?'—':taux+' %'}</b><span>du matériel en service est à jour de contrôle</span></div>
+        <div class="kpi"><b>${ctl12}</b><span>contrôles réalisés sur les 12 derniers mois</span></div>
+        <div class="kpi"><b>${allCtl.length?fmtDate(allCtl[0].c.date):'—'}</b><span>dernier contrôle enregistré</span></div>
+      </div>
+      <table class="it"><tbody>${lines.map(l=>`<tr><td>${l[0]}</td><td style="width:70px;text-align:right;"><b>${l[1]}</b></td></tr>`).join('')}</tbody></table>
+      <p style="color:#666;font-size:10px;margin-top:4px;">« À jour de contrôle » = dernier contrôle de moins d’un an, fin de vie non dépassée, matériel non réformé. Règle appliquée : contrôle annuel.</p></div>`);
+  }
+  if(B.registre){
+    const fams = {}; eq.forEach(e=>{ const f=e.famille||'Sans famille'; (fams[f]=fams[f]||[]).push(e); });
+    sections.push(`<div class="isec">${H('Registre du matériel')}${Object.keys(fams).length===0?none('Aucun matériel.'):Object.keys(fams).sort().map(f=>`
+      <h3 class="ih3">${esc(f)} (${fams[f].length})</h3>
+      <table class="it"><thead><tr><th>Désignation</th><th>Identification</th><th>Fabrication</th><th>Fin de vie</th><th>Dernier contrôle</th><th>Prochaine échéance</th><th>Statut</th></tr></thead><tbody>
+      ${fams[f].map(e=>{ const c=lastCtl(e); return `<tr><td>${nameOf(e)}</td><td>${idStr(e)}</td><td>${fmtDate(e.date_fabrication)}</td><td>${fmtDate(e.date_fin_vie)}</td>
+        <td>${c?`${fmtDate(c.date)} — ${esc(ctlLabel(c.statut))}<br><span style="color:#666;">${nm(c.verificateur_name)}</span>`:'<span style="color:#c4243a;">Jamais contrôlé</span>'}</td>
+        <td>${c&&!isReformed(e)?fmtDate(addYears(c.date,1)):'—'}</td><td>${st(e)}</td></tr>`; }).join('')}</tbody></table>`).join('')}</div>`);
+  }
+  if(B.attention){
+    const items = [];
+    inService.forEach(e=>{ const s=statusOf(e).label; const c=lastCtl(e);
+      if(s==='Contrôle dépassé') items.push(['Contrôle dépassé', e, `Échéance dépassée depuis le ${fmtDate(addYears(c.date,1))}`]);
+      else if(s==='Jamais contrôlé') items.push(['Jamais contrôlé', e, 'Aucun contrôle enregistré']);
+      else if(s==='Hors service') items.push(['Fin de vie dépassée', e, `Fin de vie le ${fmtDate(e.date_fin_vie)}`]);
+      else if(s==='Contrôle proche') items.push(['Contrôle à faire sous 30 jours', e, `Échéance le ${fmtDate(addYears(c.date,1))}`]);
+      else if(s==='Fin de vie proche') items.push(['Fin de vie proche', e, `Fin de vie le ${fmtDate(e.date_fin_vie)}`]);
+      if(c && c.statut==='reserve') items.push(['Conforme avec réserve', e, `Contrôle du ${fmtDate(c.date)}${c.observations?' — '+c.observations:''}`]);
+    });
+    const order = ['Contrôle dépassé','Jamais contrôlé','Fin de vie dépassée','Conforme avec réserve','Contrôle à faire sous 30 jours','Fin de vie proche'];
+    items.sort((a,b)=>order.indexOf(a[0])-order.indexOf(b[0]));
+    sections.push(`<div class="isec">${H('Points d’attention')}${items.length===0?none('Aucun point d’attention : tout le matériel en service est à jour.'):`
+      <table class="it"><thead><tr><th style="width:22%;">Point</th><th>Matériel</th><th>Identification</th><th>Détail</th></tr></thead><tbody>
+      ${items.map(i=>`<tr><td><b style="color:${i[0].startsWith('Contrôle à faire')||i[0]==='Fin de vie proche'||i[0]==='Conforme avec réserve'?'#b97800':'#c4243a'};">${esc(i[0])}</b></td><td>${nameOf(i[1])}</td><td>${idStr(i[1])}</td><td>${esc(i[2])}</td></tr>`).join('')}</tbody></table>`}</div>`);
+  }
+  if(B.rebut){
+    const rows1 = reformed.map(e=>{ const ri=reformInfo(e); const c=(e.controls||[]).filter(x=>x.statut==='reforme').sort((a,b)=>b.date.localeCompare(a.date))[0];
+      return `<tr><td>${nameOf(e)}</td><td>${idStr(e)}</td><td>${fmtDate(ri.date)}</td><td>${esc((c&&c.observations)||'—')}</td><td>${nm(c&&c.verificateur_name)}</td><td>${fmtDate(ri.until)}</td></tr>`; });
+    const rows2 = trashed.sort((a,b)=>(b.deleted_at||'').localeCompare(a.deleted_at||'')).map(e=>`<tr><td>${nameOf(e)}</td><td>${idStr(e)}</td><td>${fmtDate(e.deleted_at)}</td><td>${esc(e.delete_reason||'non renseigné')}</td><td>${fmtDate(trashUnlockAt(e).toISOString())}</td></tr>`);
+    const del = I.audit.filter(a=>a.action==='Matériel supprimé définitivement' && inPeriod(a.created_at));
+    const rows3 = del.map(a=>`<tr><td>${fmtDate(a.created_at)}</td><td>${esc(a.target_label||'—')}</td><td>${esc((a.details&&a.details.motif)||'non renseigné')}</td><td>${nm(a.user_name)}</td></tr>`);
+    sections.push(`<div class="isec">${H('Matériel réformé et supprimé (rebut)')}
+      <h3 class="ih3">Matériel réformé — conservé 5 ans (${rows1.length})</h3>${rows1.length?`<table class="it"><thead><tr><th>Désignation</th><th>Identification</th><th>Réformé le</th><th>Observations du contrôle</th><th>Vérificateur</th><th>Conservé jusqu’au</th></tr></thead><tbody>${rows1.join('')}</tbody></table>`:none('Aucun matériel réformé.')}
+      <h3 class="ih3">À la corbeille, en attente de suppression définitive (${rows2.length})</h3>${rows2.length?`<table class="it"><thead><tr><th>Désignation</th><th>Identification</th><th>Mis à la corbeille le</th><th>Motif</th><th>Suppression définitive possible le</th></tr></thead><tbody>${rows2.join('')}</tbody></table>`:none('Corbeille vide.')}
+      <h3 class="ih3">Supprimé définitivement (${rows3.length}, ${esc(periodTxt)})</h3>${rows3.length?`<table class="it"><thead><tr><th style="width:14%;">Date</th><th>Désignation</th><th>Motif</th><th>Par</th></tr></thead><tbody>${rows3.join('')}</tbody></table>`:none('Aucune suppression définitive sur la période.')}</div>`);
+  }
+  if(B.controles){
+    const list = allCtl.filter(x=>inPeriod(x.c.date));
+    sections.push(`<div class="isec">${H('Historique des contrôles')}<p style="color:#666;margin:0 0 6px;">${list.length} contrôle${list.length>1?'s':''} — ${esc(periodTxt)}.</p>${list.length===0?none('Aucun contrôle sur la période.'):`
+      <table class="it"><thead><tr><th style="width:12%;">Date</th><th>Matériel</th><th>Identification</th><th>Résultat</th><th>Observations</th><th>Vérificateur</th>${I.signatures?'<th>Signature</th>':''}</tr></thead><tbody>
+      ${list.map(x=>`<tr><td>${fmtDate(x.c.date)}</td><td>${nameOf(x.e)}</td><td>${idStr(x.e)}</td><td><b style="color:${x.c.statut==='conforme'?'#1a8f5f':x.c.statut==='reserve'?'#b97800':'#c4243a'};">${esc(ctlLabel(x.c.statut))}</b></td><td>${esc(x.c.observations||'—')}</td><td>${nm(x.c.verificateur_name)}</td>${I.signatures?`<td>${I.hideNames?'—':sigImg(x.c.signature_url)||'—'}</td>`:''}</tr>`).join('')}</tbody></table>`}</div>`);
+  }
+  if(B.prets){
+    const ls = []; eq.forEach(e=>(e.loans||[]).forEach(l=>{ if(l.status==='en_cours'||l.status==='en_attente'||inPeriod(l.checkout_date)) ls.push({l,e}); }));
+    ls.sort((a,b)=>(b.l.checkout_date||'').localeCompare(a.l.checkout_date||''));
+    const stl = l=>l.status==='en_attente'?'À valider':l.status==='en_cours'?'En cours':l.status==='refuse'?'Refusé':'Restitué';
+    sections.push(`<div class="isec">${H('Prêts et missions')}${ls.length===0?none('Aucun prêt ni mission sur la période.'):`
+      <table class="it"><thead><tr><th>Type</th><th>Matériel</th><th>Emprunteur / mission</th><th>Sortie</th><th>Retour prévu</th><th>Retour</th><th>État au retour</th><th>Statut</th></tr></thead><tbody>
+      ${ls.map(x=>`<tr><td>${x.l.type==='mission'?'Mission':'Prêt'}</td><td>${nameOf(x.e)}</td><td>${nm(x.l.borrower_name)}</td><td>${fmtDate(x.l.checkout_date)}</td><td>${fmtDate(x.l.expected_return_date)}</td><td>${fmtDate(x.l.return_date)}</td><td>${x.l.return_condition==='endommage'?'Endommagé':x.l.return_condition==='reserve'?'Avec réserve':x.l.return_condition?'Bon état':'—'}</td><td>${stl(x.l)}</td></tr>`).join('')}</tbody></table>`}</div>`);
+  }
+  if(B.journal){
+    const rows = I.audit.filter(a=>inPeriod(a.created_at) && (catOfAction(a.action)==='Matériel' || /Contrôle/i.test(a.action))).slice(0,500);
+    sections.push(`<div class="isec">${H('Extrait du journal')}<p style="color:#666;margin:0 0 6px;">Actions sur le matériel et contrôles — ${esc(periodTxt)}. Le journal est tenu par le serveur et ne peut être modifié par les utilisateurs.</p>${rows.length===0?none('Aucune action sur la période.'):`
+      <table class="it"><thead><tr><th style="width:15%;">Date</th><th style="width:14%;">Personne</th><th style="width:20%;">Action</th><th style="width:20%;">Concerne</th><th>Détail</th></tr></thead><tbody>
+      ${rows.map(a=>`<tr><td>${esc(fmtDateTime(a.created_at))}</td><td>${nm(a.user_name)}</td><td>${esc(a.action)}</td><td>${esc(a.target_label||'—')}</td><td>${esc(journalDetailText(a))}</td></tr>`).join('')}</tbody></table>`}</div>`);
+  }
+  if(B.fiches){
+    const fh = H('Fiches individuelles');
+    if(eq.length===0) sections.push(`<div class="isec">${fh}${none('Aucun matériel.')}</div>`);
+    sections.push(eq.map((e,i)=>{
+      const cs=(e.controls||[]).slice().sort((a,b)=>b.date.localeCompare(a.date));
+      return `<div class="fiche">${i===0?fh:''}<h3 class="ih3" style="margin-top:0;">${esc(e.designation||'—')} ${e.marque?`<span style="color:#666;font-weight:400;">${esc(e.marque)}</span>`:''}</h3>
+        <div style="display:flex;gap:14px;align-items:flex-start;">
+          <table class="it" style="flex:1;"><tbody>
+            <tr><th style="width:36%;">Famille</th><td>${esc([e.famille,e.sous_famille].filter(Boolean).join(' › ')||'—')}</td></tr>
+            <tr><th>N° de série</th><td>${esc(e.numero_serie||'—')}</td></tr><tr><th>Identification</th><td>${esc(e.identification||'—')}</td></tr>
+            <tr><th>Date de fabrication</th><td>${fmtDate(e.date_fabrication)}</td></tr><tr><th>Première utilisation</th><td>${fmtDate(e.date_premiere_utilisation)}</td></tr>
+            <tr><th>Fin de vie</th><td>${fmtDate(e.date_fin_vie)}</td></tr><tr><th>Statut</th><td>${st(e)}</td></tr></tbody></table>
+          ${I.photos&&e.photo_url?`<img src="${imgSrc(e.photo_url)}" onerror="imgFallback(this)" style="max-height:130px;max-width:170px;object-fit:contain;border:1px solid #ccc;">`:''}
+        </div>
+        <h4 style="margin:10px 0 4px;font-size:12px;">Contrôles (${cs.length})</h4>${cs.length===0?none('Aucun contrôle.'):`<table class="it"><thead><tr><th style="width:14%;">Date</th><th>Résultat</th><th>Observations</th><th>Vérificateur</th>${I.signatures?'<th>Signature</th>':''}</tr></thead><tbody>
+          ${cs.map(c=>`<tr><td>${fmtDate(c.date)}</td><td>${esc(ctlLabel(c.statut))}</td><td>${esc(c.observations||'—')}</td><td>${nm(c.verificateur_name)}</td>${I.signatures?`<td>${I.hideNames?'—':sigImg(c.signature_url)||'—'}</td>`:''}</tr>`).join('')}</tbody></table>`}</div>`; }).join(''));
+  }
+  sections.push(`<div class="isec" style="margin-top:22px;"><table class="it"><tr><th style="width:50%;">Établi par</th><th>Vu par le chef d’unité</th></tr><tr><td style="height:70px;">Nom : ${nm(state.myDisplayName)}<br>Date : ${now.toLocaleDateString('fr-FR')}<br>Signature :</td><td>Nom :<br>Date :<br>Signature :</td></tr></table>
+    <p style="color:#888;font-size:10px;margin-top:10px;">Document généré par Optepia à partir du registre de l’unité. Les statuts sont calculés à la date d’édition (contrôle annuel ; matériel réformé conservé 5 ans). Réf. ${docId}.</p></div>`);
+
+  return `
+  <style>
+    @page{size:A4 landscape;margin:10mm;}
+    .insp{font-size:11px;line-height:1.35;}
+    .insp .it{width:100%;border-collapse:collapse;margin:2px 0 8px;}
+    .insp .it th,.insp .it td{border:1px solid #c8c8c8;padding:4px 6px;text-align:left;vertical-align:top;}
+    .insp .it th{background:#f2f2f2;font-weight:600;}
+    .insp .it thead{display:table-header-group;} .insp .it tr{page-break-inside:avoid;}
+    .insp .ih{font-size:15px;margin:18px 0 6px;color:#0B1014;border-bottom:1px solid #0A9FA0;padding-bottom:3px;}
+    .insp .ih3{font-size:12.5px;margin:12px 0 4px;color:#111;}
+    .insp .kpi{flex:1;border:1px solid #c8c8c8;border-radius:6px;padding:8px 10px;} .insp .kpi b{display:block;font-size:20px;color:#0A9FA0;} .insp .kpi span{color:#555;font-size:10.5px;}
+    .insp .fiche{page-break-before:always;}
+    .insp-w{overflow-x:auto;}
+    @media print{ .insp-w{overflow:visible;} .insp .isec{page-break-inside:auto;} .insp .ih,.insp .ih3{page-break-after:avoid;} }
+  </style>
+  <div class="noprint">
+    <div class="backlink" onclick="openInspection()">‹ Modifier le contenu</div>
+    <button class="btn btn-primary" style="margin-bottom:10px;" onclick="window.print()">🖨 Imprimer / Enregistrer en PDF</button>
+    <p class="muted" style="font-size:12px;margin-bottom:12px;">Dans la fenêtre d'impression, choisis « Enregistrer au format PDF ». Orientation paysage conseillée (déjà proposée) ; décoche « En-têtes et pieds de page » si tu veux un document plus propre.</p>
+  </div>
+  <div class="sheet insp"><div class="insp-w">${sections.join('')}</div></div>`;
+}
+
 /* ---- Export ---- */
 function renderExport(){
   return `
@@ -2244,6 +2455,10 @@ function renderExport(){
     <button class="btn btn-primary" onclick="document.getElementById('csvInput').click()">Importer un fichier CSV</button>
     <p class="muted" style="margin-top:10px;font-size:12px;">Remplis le modèle (une ligne par article), en gardant les dates au format AAAA-MM-JJ (ou JJ/MM/AAAA), puis importe-le ici. Un aperçu s'affiche avant toute création.</p>
   </div>` : ''}
+  ${can('gererMembres') ? `
+  <h2 style="margin-top:24px;">Dossier d'inspection (PDF)</h2>
+  <p class="muted" style="margin-bottom:16px;">Un document à présenter lors d'une inspection (HSIE) : état du parc, contrôles réalisés, matériel réformé ou supprimé, avec le contenu de ton choix.</p>
+  <div class="card"><button class="btn btn-primary" onclick="openInspection()">📄 Préparer le dossier d'inspection</button></div>` : ''}
   ${can('gererMembres') ? `
   <h2 style="margin-top:24px;">Sauvegarde complète</h2>
   <p class="muted" style="margin-bottom:16px;">Télécharge toutes les données de l'unité (matériel, contrôles, prêts, membres, journal) dans un fichier. Les photos, signatures et fiches techniques ne sont pas incluses dans le fichier — seuls leurs liens le sont (ils restent valables tant que l'unité existe).</p>
