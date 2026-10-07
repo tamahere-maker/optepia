@@ -2388,6 +2388,8 @@ function renderInspectionDoc(){
       <table class="it"><thead><tr><th>Type</th><th>Matériel</th><th>Emprunteur / mission</th><th>Sortie</th><th>Retour prévu</th><th>Retour</th><th>État au retour</th><th>Statut</th></tr></thead><tbody>
       ${ls.map(x=>`<tr><td>${x.l.type==='mission'?'Mission':'Prêt'}</td><td>${nameOf(x.e)}</td><td>${nm(x.l.borrower_name)}</td><td>${fmtDate(x.l.checkout_date)}</td><td>${fmtDate(x.l.expected_return_date)}</td><td>${fmtDate(x.l.return_date)}</td><td>${x.l.return_condition==='endommage'?'Endommagé':x.l.return_condition==='reserve'?'Avec réserve':x.l.return_condition?'Bon état':'—'}</td><td>${stl(x.l)}</td></tr>`).join('')}</tbody></table>`}</div>`);
   }
+  sections.push(`<div class="isec${pb()}" style="margin-top:22px;"><table class="it"><tr><th style="width:50%;">Établi par</th><th>Vu par le chef d’unité</th></tr><tr><td style="height:70px;">Nom : ${nm(state.myDisplayName)}<br>Date : ${now.toLocaleDateString('fr-FR')}<br>Signature :</td><td>Nom :<br>Date :<br>Signature :</td></tr></table>
+    <p style="color:#888;font-size:10px;margin-top:10px;">Document généré par Optepia à partir du registre de l’unité. Les statuts sont calculés à la date d’édition (contrôle annuel ; matériel réformé conservé 5 ans). Réf. ${docId}.</p></div>`);
   if(B.journal){
     const rows = I.audit.filter(a=>inPeriod(a.created_at) && (catOfAction(a.action)==='Matériel' || /Contrôle/i.test(a.action))).slice(0,500);
     sections.push(`<div class="isec${pb()}">${H('Extrait du journal')}<p style="color:#666;margin:0 0 6px;">Actions sur le matériel et contrôles — ${esc(periodTxt)}. Le journal est tenu par le serveur et ne peut être modifié par les utilisateurs.</p>${rows.length===0?none('Aucune action sur la période.'):`
@@ -2398,23 +2400,20 @@ function renderInspectionDoc(){
     const fh = H('Fiches individuelles');
     if(eq.length===0) sections.push(`<div class="isec">${fh}${none('Aucun matériel.')}</div>`);
     sections.push(eq.map((e,i)=>{
-      const lastF=i===eq.length-1;
       const all=(e.controls||[]).slice().sort((a,b)=>b.date.localeCompare(a.date)); const cs=all.slice(0,10);
       return `<div class="fiche">${i===0?fh:''}<h3 class="ih3" style="margin-top:0;">${esc(e.designation||'—')} ${e.marque?`<span style="color:#666;font-weight:400;">${esc(e.marque)}</span>`:''}</h3>
         <div style="display:flex;gap:14px;align-items:flex-start;">
+          ${I.photos&&e.photo_url?`<img src="${imgSrc(e.photo_url)}" onerror="imgFallback(this)" style="max-height:130px;max-width:170px;object-fit:contain;border:1px solid #ccc;">`:''}
           <table class="it" style="flex:1;"><tbody>
             <tr><th style="width:36%;">Famille</th><td>${esc([e.famille,e.sous_famille].filter(Boolean).join(' › ')||'—')}</td></tr>
             <tr><th>N° de série</th><td>${esc(e.numero_serie||'—')}</td></tr><tr><th>Identification</th><td>${esc(e.identification||'—')}</td></tr>
             <tr><th>Date de fabrication</th><td>${fmtDate(e.date_fabrication)}</td></tr><tr><th>Première utilisation</th><td>${fmtDate(e.date_premiere_utilisation)}</td></tr>
             <tr><th>Fin de vie</th><td>${fmtDate(e.date_fin_vie)}</td></tr><tr><th>Statut</th><td>${st(e)}</td></tr></tbody></table>
-          ${I.photos&&e.photo_url?`<img src="${imgSrc(e.photo_url)}" onerror="imgFallback(this)" style="max-height:130px;max-width:170px;object-fit:contain;border:1px solid #ccc;">`:''}
         </div>
         <h4 style="margin:10px 0 4px;font-size:12px;">${all.length>10?'10 derniers contrôles sur '+all.length:'Contrôles ('+all.length+')'}</h4>${cs.length===0?none('Aucun contrôle.'):`<table class="it"><thead><tr><th style="width:14%;">Date</th><th>Résultat</th><th>Observations</th><th>Vérificateur</th>${I.signatures?'<th>Signature</th>':''}</tr></thead><tbody>
-          ${cs.map(c=>`<tr><td>${fmtDate(c.date)}</td><td><b style="color:${ctlColor(c.statut)};">${esc(ctlLabel(c.statut))}</b></td><td>${esc(c.observations||'—')}</td><td>${nm(c.verificateur_name)}</td>${I.signatures?`<td>${I.hideNames?'—':sigImg(c.signature_url)||'—'}</td>`:''}</tr>`).join('')}</tbody></table>`}${lastF?"<!--VISA-->":""}</div>`; }).join(''));
+          ${cs.map(c=>`<tr><td>${fmtDate(c.date)}</td><td><b style="color:${ctlColor(c.statut)};">${esc(ctlLabel(c.statut))}</b></td><td>${esc(c.observations||'—')}</td><td>${nm(c.verificateur_name)}</td>${I.signatures?`<td>${I.hideNames?'—':sigImg(c.signature_url)||'—'}</td>`:''}</tr>`).join('')}</tbody></table>`}</div>`; }).join(''));
   }
-  const visa=`<div class="isec" style="margin-top:22px;"><table class="it"><tr><th style="width:50%;">Établi par</th><th>Vu par le chef d’unité</th></tr><tr><td style="height:70px;">Nom : ${nm(state.myDisplayName)}<br>Date : ${now.toLocaleDateString('fr-FR')}<br>Signature :</td><td>Nom :<br>Date :<br>Signature :</td></tr></table>
-    <p style="color:#888;font-size:10px;margin-top:10px;">Document généré par Optepia à partir du registre de l’unité. Les statuts sont calculés à la date d’édition (contrôle annuel ; matériel réformé conservé 5 ans). Réf. ${docId}.</p></div>`;
-  if(!B.fiches) sections.push(visa);
+
 
   return `
   <style>
@@ -2438,7 +2437,7 @@ function renderInspectionDoc(){
     <button class="btn btn-primary" style="margin-bottom:10px;" onclick="window.print()">🖨 Imprimer / Enregistrer en PDF</button>
     <p class="muted" style="font-size:12px;margin-bottom:12px;">Dans la fenêtre d'impression, choisis « Enregistrer au format PDF ». Orientation paysage conseillée (déjà proposée) ; décoche « En-têtes et pieds de page » si tu veux un document plus propre.</p>
   </div>
-  <div class="sheet insp"><div class="insp-w">${sections.join('').replace('<!--VISA-->',visa)}</div></div>`;
+  <div class="sheet insp"><div class="insp-w">${sections.join('')}</div></div>`;
 }
 
 /* ---- Export ---- */
