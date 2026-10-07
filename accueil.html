@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OPTEPIA — Suivi, contrôle et traçabilité des EPI</title>
+<meta name="description" content="OPTEPIA : l'application qui suit vos EPI, planifie les contrôles, trace les prêts et prépare le dossier d'inspection. Essai gratuit 30 jours, 15 € TTC par mois par unité.">
+<meta name="theme-color" content="#0B1014">
+<meta property="og:title" content="OPTEPIA — Suivi, contrôle et traçabilité des EPI">
+<meta property="og:description" content="Tous vos EPI contrôlés, tracés, prêts pour l'inspection. Essai gratuit 30 jours.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://optepia.fr/">
+<meta property="og:image" content="https://optepia.fr/icon-512.png">
+<link rel="canonical" href="https://optepia.fr/">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0B1014;--surface:#121A20;--surface2:#1A242C;--border:#27343E;--text:#EEF3F5;--muted:#8A9AA5;--accent:#37D69A;--accent-dim:#06A58F;--on-accent:#0B1014;--grad:linear-gradient(135deg,#95F2A6 0%,#37D69A 50%,#0A9FA0 100%);--warn:#FFB21F;--danger:#FF5A6E;--shadow:0 18px 50px rgba(0,0,0,.45);}
+@media (prefers-color-scheme:light){:root{--bg:#F3F6F7;--surface:#FFFFFF;--surface2:#E8EEF0;--border:#D3DCE1;--text:#0F1A20;--muted:#5A6A74;--accent:#0A8068;--accent-dim:#07665A;--on-accent:#FFFFFF;--grad:linear-gradient(135deg,#0A9FA0 0%,#0A8068 100%);--shadow:0 18px 50px rgba(15,26,32,.16);}}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,sans-serif;line-height:1.6;font-size:16px;-webkit-font-smoothing:antialiased}
+img{max-width:100%;height:auto;display:block}
+a{color:var(--accent)}
+h1,h2,h3{font-family:Sora,sans-serif;line-height:1.2;margin:0}
+.wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+/* nav */
+nav{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--border)}
+nav .wrap{display:flex;align-items:center;gap:16px;height:60px}
+.brand{display:flex;align-items:center;gap:10px;color:var(--text);text-decoration:none;font-family:Sora,sans-serif;font-weight:700;letter-spacing:3px;font-size:15px}
+.brand img{height:30px;width:auto}
+nav .links{margin-left:auto;display:flex;gap:22px;align-items:center}
+nav .links a.l{color:var(--muted);text-decoration:none;font-size:14px;font-weight:500}
+nav .links a.l:hover{color:var(--text)}
+.btn{display:inline-block;padding:12px 22px;border-radius:10px;font-weight:700;font-size:15px;text-decoration:none;border:1px solid transparent;cursor:pointer;font-family:inherit}
+.btn.p{background:var(--grad);color:var(--on-accent)}
+.btn.s{background:transparent;color:var(--text);border-color:var(--border)}
+.btn.s:hover{border-color:var(--accent)}
+.btn.sm{padding:8px 16px;font-size:14px}
+@media(max-width:760px){nav .links a.l{display:none}nav .links{gap:8px}nav .btn.p{display:none}}
+/* hero */
+.hero{padding:64px 0 40px;overflow:hidden}
+.hero .wrap{display:grid;grid-template-columns:1.1fr .9fr;gap:40px;align-items:center}
+.kicker{display:inline-block;font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:14px}
+.hero h1{font-size:clamp(32px,5vw,50px);margin-bottom:18px}
+.hero h1 em{font-style:normal;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero p.lead{font-size:18px;color:var(--muted);max-width:520px;margin:0 0 26px}
+.cta{display:flex;gap:12px;flex-wrap:wrap}
+.hero small{display:block;margin-top:14px;color:var(--muted);font-size:13px}
+.phones{position:relative;height:520px}
+.phone{position:absolute;width:230px;border-radius:30px;border:6px solid #1c2730;background:#000;box-shadow:var(--shadow);overflow:hidden}
+.phone img{width:100%;height:auto}
+.phone.a{left:6%;top:30px;transform:rotate(-5deg);z-index:1}
+.phone.b{right:4%;top:0;transform:rotate(4deg);z-index:2}
+@media(max-width:860px){.hero .wrap{grid-template-columns:1fr}.phones{height:440px;max-width:420px;margin:0 auto;width:100%}.phone{width:200px}}
+/* sections */
+section{padding:64px 0}
+section.alt{background:var(--surface);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.sh{text-align:center;max-width:680px;margin:0 auto 40px}
+.sh h2{font-size:clamp(26px,3.6vw,36px);margin-bottom:10px}
+.sh p{color:var(--muted);margin:0}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}
+@media(max-width:860px){.grid3{grid-template-columns:1fr 1fr}}
+@media(max-width:560px){.grid3,.grid2{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px}
+section.alt .card{background:var(--bg)}
+.card .ic{width:42px;height:42px;border-radius:11px;background:var(--grad);color:var(--on-accent);display:flex;align-items:center;justify-content:center;margin-bottom:14px;font-size:20px}
+.card h3{font-size:17px;margin-bottom:6px}
+.card p{margin:0;color:var(--muted);font-size:15px}
+/* problem */
+.pb li{margin:8px 0;color:var(--muted)}
+.pb strong{color:var(--text)}
+/* showcase */
+.show{display:grid;grid-template-columns:1fr 1fr;gap:44px;align-items:center}
+.show.rev .t{order:2}
+.show h3{font-size:24px;margin-bottom:12px}
+.show ul{padding-left:20px;margin:12px 0 0;color:var(--muted)}
+.show li{margin:6px 0}
+.shot{border-radius:14px;border:1px solid var(--border);box-shadow:var(--shadow);overflow:hidden;background:#fff}
+.phoneshots{display:flex;gap:16px;justify-content:center}
+.phoneshots .phone{position:static;width:190px;transform:none}
+.phoneshots .phone:nth-child(2){margin-top:34px}
+@media(max-width:860px){.show{grid-template-columns:1fr}.show.rev .t{order:0}}
+@media(max-width:480px){.phoneshots .phone{width:44%}}
+/* pricing */
+.price{display:grid;grid-template-columns:1fr 1fr;gap:18px;max-width:760px;margin:0 auto}
+@media(max-width:620px){.price{grid-template-columns:1fr}}
+.plan{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;position:relative}
+.plan.best{border-color:var(--accent)}
+.plan .tag{position:absolute;top:-12px;right:20px;background:var(--grad);color:var(--on-accent);font-size:12px;font-weight:700;padding:3px 12px;border-radius:20px}
+.plan h3{font-size:16px;color:var(--muted);font-weight:600;margin-bottom:10px}
+.plan .amt{font-family:Sora,sans-serif;font-size:42px;font-weight:700}
+.plan .amt span{font-size:15px;color:var(--muted);font-weight:500;font-family:Inter,system-ui,sans-serif}
+.plan .sub{color:var(--muted);font-size:14px;margin:4px 0 18px}
+.incl{max-width:760px;margin:30px auto 0;display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;padding:0;list-style:none}
+@media(max-width:620px){.incl{grid-template-columns:1fr}}
+.incl li{padding-left:26px;position:relative;font-size:15px}
+.incl li:before{content:"✓";position:absolute;left:0;color:var(--accent);font-weight:700}
+.note{max-width:760px;margin:24px auto 0;text-align:center;color:var(--muted);font-size:14px}
+/* trust */
+.trust .card h3{font-size:16px}
+/* faq */
+details{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:0 18px;margin:0 auto 10px;max-width:760px}
+details summary{cursor:pointer;padding:16px 0;font-weight:600;list-style:none;display:flex;justify-content:space-between;gap:12px}
+details summary::-webkit-details-marker{display:none}
+details summary:after{content:"+";color:var(--accent);font-size:20px;line-height:1}
+details[open] summary:after{content:"–"}
+details p{margin:0 0 16px;color:var(--muted)}
+/* contact */
+.final{text-align:center}
+.final h2{font-size:clamp(26px,3.6vw,36px);margin-bottom:10px}
+.final p{color:var(--muted);max-width:560px;margin:0 auto 24px}
+.final .cta{justify-content:center}
+footer{border-top:1px solid var(--border);padding:28px 0 40px;color:var(--muted);font-size:14px}
+footer .wrap{display:flex;gap:16px 28px;flex-wrap:wrap;justify-content:space-between;align-items:center}
+footer a{color:var(--muted);text-decoration:none;margin-right:16px}
+footer a:hover{color:var(--text)}
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="#"><img src="logo-mark.png" alt="">OPTEPIA</a>
+  <div class="links">
+    <a class="l" href="#fonctions">Fonctions</a>
+    <a class="l" href="#inspection">Inspection</a>
+    <a class="l" href="#tarifs">Tarifs</a>
+    <a class="l" href="#faq">Questions</a>
+    <a class="btn s sm" href="https://app.optepia.fr">Connexion</a>
+    <a class="btn p sm" href="https://app.optepia.fr">Essayer gratuitement</a>
+  </div>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <div>
+    <span class="kicker">Suivi · Contrôle · Traçabilité des EPI</span>
+    <h1>Tous vos EPI <em>contrôlés, tracés,</em> prêts pour l’inspection.</h1>
+    <p class="lead">Fini les classeurs et les tableurs : OPTEPIA suit chaque équipement, vous prévient avant les échéances de contrôle et prépare votre dossier d’inspection en un clic.</p>
+    <div class="cta">
+      <a class="btn p" href="https://app.optepia.fr">Essayer gratuitement 30 jours</a>
+      <a class="btn s" href="mailto:contact@optepia.fr?subject=Demande%20de%20d%C3%A9mo%20OPTEPIA">Demander une démo</a>
+    </div>
+    <small>Sans engagement · aucune carte bancaire demandée · utilisable sur téléphone et ordinateur</small>
+  </div>
+  <div class="phones" aria-hidden="true">
+    <div class="phone a"><img src="img/app-liste.webp" alt="" width="390" height="780"></div>
+    <div class="phone b"><img src="img/app-accueil.webp" alt="" width="390" height="780"></div>
+  </div>
+</div></header>
+
+<section class="alt"><div class="wrap">
+  <div class="sh"><h2>Un contrôle oublié, c’est un risque</h2><p>Le suivi du matériel de protection repose souvent sur des fichiers éparpillés et sur la mémoire de chacun.</p></div>
+  <div class="grid3">
+    <div class="card"><div class="ic">📅</div><h3>Des échéances qui passent inaperçues</h3><p>Contrôles annuels dépassés, fins de vie atteintes : on s’en aperçoit trop tard.</p></div>
+    <div class="card"><div class="ic">🗂️</div><h3>Des preuves introuvables</h3><p>Qui a contrôlé quoi, quand, avec quel résultat ? Impossible de répondre vite lors d’une inspection.</p></div>
+    <div class="card"><div class="ic">🔁</div><h3>Un matériel qui circule sans suivi</h3><p>Prêts, missions, retours : personne ne sait précisément où se trouve chaque équipement.</p></div>
+  </div>
+</div></section>
+
+<section id="fonctions"><div class="wrap">
+  <div class="sh"><h2>Tout ce qu’il faut, rien de superflu</h2><p>Une application simple, pensée pour ceux qui contrôlent réellement le matériel.</p></div>
+  <div class="grid3">
+    <div class="card"><div class="ic">🧰</div><h3>Registre du matériel</h3><p>Une fiche par équipement : photo, n° de série, dates de fabrication, de première utilisation et de fin de vie. Import par fichier CSV et lecture de QR code.</p></div>
+    <div class="card"><div class="ic">✅</div><h3>Contrôles signés</h3><p>Contrôle individuel ou groupé, observations, signature du vérificateur. Le statut (conforme, à contrôler, hors service) se calcule tout seul.</p></div>
+    <div class="card"><div class="ic">🔔</div><h3>Alertes par e-mail</h3><p>Un récapitulatif hebdomadaire aux responsables : contrôles à venir, fins de vie proches, prêts en retard. Rien n’est envoyé quand tout est en ordre.</p></div>
+    <div class="card"><div class="ic">🤝</div><h3>Prêts et missions</h3><p>Sortie, validation par un responsable, retour avec l’état du matériel. Vous savez qui a quoi, à tout moment.</p></div>
+    <div class="card"><div class="ic">🧾</div><h3>Journal inviolable</h3><p>Chaque action est enregistrée côté serveur avec son auteur et sa date, y compris les suppressions avec leur motif. Personne ne peut le modifier.</p></div>
+    <div class="card"><div class="ic">👥</div><h3>Équipe et droits</h3><p>Administrateur, vérificateur, assistant ou lecteur : chacun ne voit et ne fait que ce qui lui est confié. Membres illimités.</p></div>
+  </div>
+</div></section>
+
+<section class="alt" id="inspection"><div class="wrap">
+  <div class="show">
+    <div class="t">
+      <span class="kicker">Dossier d’inspection</span>
+      <h3>Prêt pour l’inspection en un clic</h3>
+      <p style="color:var(--muted);margin:0">Générez un PDF complet, au contenu que vous choisissez : il démontre que vos EPI sont vérifiés et montre ce qui a été réformé.</p>
+      <ul>
+        <li>Synthèse chiffrée et registre par famille, avec le résultat et la signature du dernier contrôle</li>
+        <li>Points d’attention : contrôles dépassés, fins de vie proches</li>
+        <li>Matériel réformé et supprimé, avec les motifs, conservé 5 ans</li>
+        <li>Prêts et missions, extrait du journal, fiches individuelles</li>
+        <li>Option pour masquer les noms de personnes avant envoi</li>
+      </ul>
+    </div>
+    <div class="shot"><img src="img/dossier-registre.webp" alt="Exemple de page de registre du dossier d’inspection" width="1256" height="803" loading="lazy"></div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="show rev">
+    <div class="t">
+      <span class="kicker">Au quotidien</span>
+      <h3>Dans la poche, sur le terrain</h3>
+      <p style="color:var(--muted);margin:0">L’application s’installe sur l’écran d’accueil du téléphone et fonctionne aussi sur ordinateur, avec la même interface.</p>
+      <ul>
+        <li>Recherche instantanée, filtres et tris, vue par type ou en tableau</li>
+        <li>Contrôle d’un lot de matériel en une seule signature</li>
+        <li>Corbeille avec motif obligatoire : suppression définitive possible après 7 jours seulement</li>
+        <li>Sauvegarde complète et export à tout moment</li>
+      </ul>
+    </div>
+    <div class="phoneshots" aria-hidden="true">
+      <div class="phone"><img src="img/app-controle.webp" alt="" width="390" height="780"></div>
+      <div class="phone"><img src="img/app-prets.webp" alt="" width="390" height="780"</div>
+    </div>
+  </div>
+</div></section>
+
+<section class="alt trust"><div class="wrap">
+  <div class="sh"><h2>Vos données, en sécurité</h2><p>Une base de données par unité, des accès contrôlés et rien d’effacé sans trace.</p></div>
+  <div class="grid3">
+    <div class="card"><h3>Hébergement en France</h3><p>Base de données hébergée à Paris, dans l’Union européenne. Politique de confidentialité conforme au RGPD.</p></div>
+    <div class="card"><h3>Accès protégés</h3><p>Compte personnel, double authentification disponible, droits par rôle et cloisonnement strict entre les unités.</p></div>
+    <div class="card"><h3>Vos données restent à vous</h3><p>Export et sauvegarde à tout moment. Si l’abonnement s’arrête, l’accès passe en lecture seule : rien n’est supprimé automatiquement.</p></div>
+  </div>
+</div></section>
+
+<section id="tarifs"><div class="wrap">
+  <div class="sh"><h2>Un tarif simple</h2><p>Un abonnement par unité, toutes les fonctions incluses, avec un nombre de membres illimité.</p></div>
+  <div class="price">
+    <div class="plan">
+      <h3>Mensuel</h3>
+      <div class="amt">15 €<span> TTC / mois</span></div>
+      <div class="sub">Sans engagement</div>
+      <a class="btn s" style="width:100%;text-align:center" href="https://app.optepia.fr">Commencer l’essai</a>
+    </div>
+    <div class="plan best">
+      <span class="tag">2 mois offerts</span>
+      <h3>Annuel</h3>
+      <div class="amt">150 €<span> TTC / an</span></div>
+      <div class="sub">Soit 12,50 € TTC par mois</div>
+      <a class="btn p" style="width:100%;text-align:center" href="https://app.optepia.fr">Commencer l’essai</a>
+    </div>
+  </div>
+  <ul class="incl">
+    <li>Matériel, contrôles et prêts</li>
+    <li>Membres illimités, 4 rôles</li>
+    <li>Dossier d’inspection PDF</li>
+    <li>Alertes e-mail hebdomadaires</li>
+    <li>Journal complet des actions</li>
+    <li>Sauvegarde et exports</li>
+  </ul>
+  <p class="note"><b>30 jours d’essai gratuit</b>, sans carte bancaire. Paiement par virement ou mandat administratif, facture sur demande. Besoin d’un devis ou d’un bon de commande ? <a href="mailto:contact@optepia.fr?subject=Demande%20de%20devis%20OPTEPIA">Écrivez-nous</a>.</p>
+</div></section>
+
+<section class="alt" id="faq"><div class="wrap">
+  <div class="sh"><h2>Questions fréquentes</h2></div>
+  <details><summary>À qui s’adresse OPTEPIA ?</summary><p>À toute personne ou entreprise qui doit vérifier des EPI : équipes d’intervention, services techniques, entreprises de travaux en hauteur, clubs et associations, loueurs de matériel.</p></details>
+  <details><summary>Que se passe-t-il à la fin de l’essai ?</summary><p>Vous disposez de 14 jours supplémentaires pour régulariser, puis l’accès passe en lecture seule : vous consultez et exportez vos données, mais vous ne pouvez plus en saisir. Rien n’est supprimé.</p></details>
+  <details><summary>Faut-il installer quelque chose ?</summary><p>Non. L’application fonctionne dans le navigateur et peut être ajoutée à l’écran d’accueil du téléphone comme une application.</p></details>
+  <details><summary>Puis-je importer mon matériel existant ?</summary><p>Oui : un modèle de fichier CSV est fourni, vous le remplissez (ou l’exportez depuis votre tableur) et l’importez en quelques secondes. Un manuel d’utilisation complet est également disponible.</p></details>
+  <details><summary>Puis-je résilier à tout moment ?</summary><p>Oui. L’abonnement mensuel se résilie sans engagement, et vous pouvez exporter une sauvegarde complète de vos données à tout moment.</p></details>
+  <details><summary>Où consulter le manuel ?</summary><p><a href="manuel-utilisation.pdf" target="_blank" rel="noopener">Télécharger le manuel d’utilisation (PDF)</a>.</p></details>
+</div></section>
+
+<section class="final"><div class="wrap">
+  <h2>Prêt à reprendre la main sur vos EPI ?</h2>
+  <p>Créez votre unité en deux minutes, invitez votre équipe et saisissez vos premiers équipements.</p>
+  <div class="cta">
+    <a class="btn p" href="https://app.optepia.fr">Essayer gratuitement 30 jours</a>
+    <a class="btn s" href="mailto:contact@optepia.fr?subject=Question%20sur%20OPTEPIA">Nous écrire</a>
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  <div><a href="mentions-legales.html">Mentions légales</a><a href="cgu.html">CGU</a><a href="confidentialite.html">Confidentialité</a><a href="manuel-utilisation.pdf" target="_blank" rel="noopener">Manuel</a></div>
+  <div>© OPTEPIA · <a href="mailto:contact@optepia.fr" style="margin:0">contact@optepia.fr</a></div>
+</div></footer>
+
+</body>
+</html>

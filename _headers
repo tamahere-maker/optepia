@@ -6,3 +6,9 @@
 
 /
   Cache-Control: no-cache, must-revalidate
+
+/accueil
+  Cache-Control: no-cache, must-revalidate
+
+/accueil.html
+  Cache-Control: no-cache, must-revalidate
