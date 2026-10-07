@@ -41,6 +41,8 @@
   .field{margin-bottom:14px;}
   .field label{display:block;font-size:11px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.6px;font-weight:600;}
   .field input{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:12px;font-size:16px;}
+  .field textarea{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:12px;font-size:16px;font-family:inherit;}
+  .field textarea:focus{outline:none;border-color:var(--accent);}
   .field input:focus,.search input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(55,214,154,.16);}
   .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:13px 18px;border-radius:10px;font-size:14px;font-weight:700;width:100%;}
   .btn-primary{background:var(--brand-grad);color:var(--on-accent);}
@@ -311,6 +313,7 @@ async function loadAll(){
   state.allMembers.forEach(m=>paths.push(m.avatar_url));
   state.allEquipment.forEach(e=>paths.push(e.photo_url));
   resolveSignedUrls(paths).then(render);
+  loadSupport();
 }
 async function loadBackupsOnly(){ state.bkStats = undefined;
   const r = await sb.rpc('admin_list_backups');
@@ -648,17 +651,19 @@ function renderTopbar(){
 function askGoApp(){
   openModal({ title:'Aller sur l\'application ?', body:'<p>Tu vas quitter l\'espace administration pour ouvrir l\'application Optepia.</p>', confirmLabel:'Ouvrir l\'application', onConfirm:()=>{ location.href='index.html'; } });
 }
-function setView(v){ state.view=v; if(v==='log' && !state.adminLog) loadLog(); render(); window.scrollTo(0,0); }
+function setView(v){ state.view=v; if(v==='log' && !state.adminLog) loadLog(); if(v==='support') loadSupport(); render(); window.scrollTo(0,0); }
+function supCountLabel(){ const n=(state.supTickets||[]).filter(t=>t.status==='open').length; return n?' ('+n+')':''; }
 function renderNav(){
   const cur = state.view==='unitDetail' ? 'units' : state.view;
   const t = (k,l)=>`<button class="tab ${cur===k?'active':''}" onclick="setView('${k}')">${l}</button>`;
-  return `<div class="navwrap"><div class="tabs">${t('units','Unités')}${t('backups','Sauvegardes')}${t('catalog','Catalogue')}${t('log','Journal admin')}</div></div>`;
+  return `<div class="navwrap"><div class="tabs">${t('units','Unités')}${t('backups','Sauvegardes')}${t('catalog','Catalogue')}${t('support','Support'+supCountLabel())}${t('log','Journal admin')}</div></div>`;
 }
 function renderView(){
   if(state.view==='unitDetail') return renderUnitDetail();
   if(state.view==='backups') return renderBackupsView();
   if(state.view==='catalog') return renderCatalogView();
   if(state.view==='log') return renderLogView();
+  if(state.view==='support') return renderSupportView();
   return renderUnitsList();
 }
 function renderSelBar(){
@@ -1153,6 +1158,66 @@ function renderLogView(){
       <div class="row"><b style="font-size:13px;">${esc(j.action)}</b><span class="muted" style="font-size:11px;">${fmtDateTime(j.created_at)}</span></div>
       <p class="muted" style="font-size:12px;margin-top:2px;">${esc(j.target||'')}${j.admin_email?' · '+esc(j.admin_email):''}</p>
     </div>`).join('')}</div>`;
+}
+
+
+/* =====================================================================
+   Support : tickets des unités
+   ===================================================================== */
+const SUP_CAT={question:'Question',bug:'Problème / bug',suggestion:'Suggestion',facturation:'Facturation',autre:'Autre'};
+const SUP_ST={open:'À traiter',answered:'Répondu',closed:'Clos'};
+function supBadge(st){ const c=st==='open'?'var(--warn)':st==='answered'?'var(--ok)':'var(--text-muted)'; return `<span style="font-size:11px;font-weight:700;color:${c};border:1px solid ${c};border-radius:99px;padding:2px 8px;white-space:nowrap;">${SUP_ST[st]||st}</span>`; }
+async function loadSupport(){
+  const t=await sb.from('support_tickets').select('*').order('updated_at',{ascending:false}).limit(300);
+  state.supTickets=t.error?[]:t.data; if(t.error) state.error=t.error.message;
+  if(state.view==='support') render();
+}
+function supUnitName(id){ const u=state.units.find(x=>x.id===id); return u?u.name:'—'; }
+async function openSupTicket(id){
+  state.supOpen=id; state.supMsgs=null; state.supReply=''; render();
+  const {data}=await sb.from('support_messages').select('*').eq('ticket_id',id).order('created_at');
+  state.supMsgs=data||[]; render();
+}
+function renderSupportView(){
+  if(!state.supTickets) return `<div class="muted">Chargement…</div>`;
+  if(state.supOpen) return renderSupThread();
+  const f=state.supFilter||'open';
+  const list=state.supTickets.filter(t=>f==='all'||t.status===f);
+  const cnt=k=>state.supTickets.filter(t=>t.status===k).length;
+  const chip=(k,l,n)=>`<button class="tab ${f===k?'active':''}" onclick="state.supFilter='${k}'; render();">${l}${n!==undefined?' ('+n+')':''}</button>`;
+  return `<h1 style="margin-bottom:10px;">Support</h1>
+  <div class="tabs" style="margin-bottom:12px;">${chip('open','À traiter',cnt('open'))}${chip('answered','Répondus',cnt('answered'))}${chip('closed','Clos',cnt('closed'))}${chip('all','Tous')}</div>
+  ${list.length?list.map(t=>`<div class="card" style="cursor:pointer;" onclick="openSupTicket('${t.id}')">
+    <div class="row"><b style="font-size:14px;">${esc(t.subject)}</b>${supBadge(t.status)}</div>
+    <p class="muted" style="font-size:12px;margin-top:3px;">${esc(supUnitName(t.unit_id))} · ${esc(t.author_name||t.author_email||'')} · ${esc(SUP_CAT[t.category]||'')} · ${fmtDateTime(t.updated_at)}</p></div>`).join(''):'<div class="empty">Aucun ticket.</div>'}`;
+}
+function renderSupThread(){
+  const t=state.supTickets.find(x=>x.id===state.supOpen); if(!t) return '';
+  const ms=state.supMsgs;
+  return `<button class="btn btn-secondary" style="width:auto;margin-bottom:12px;" onclick="state.supOpen=null; render();">‹ Tous les tickets</button>
+  <div class="row" style="margin-bottom:4px;"><h1 style="margin:0;">${esc(t.subject)}</h1>${supBadge(t.status)}</div>
+  <p class="muted" style="font-size:12px;margin-bottom:12px;">${esc(supUnitName(t.unit_id))} · ${esc(t.author_name||'')} &lt;${esc(t.author_email||'')}&gt; · ${esc(SUP_CAT[t.category]||'')} · #${esc(String(t.id).slice(0,8))}</p>
+  ${ms===null?'<div class="muted">Chargement…</div>':ms.map(m=>`<div class="card" style="${m.is_staff?'border-color:var(--accent);':''}">
+    <p class="muted" style="font-size:12px;margin-bottom:6px;"><b>${m.is_staff?'Support (toi)':esc(t.author_name||'Membre')}</b> · ${fmtDateTime(m.created_at)}</p>
+    <div style="white-space:pre-wrap;font-size:14px;">${esc(m.body)}</div></div>`).join('')}
+  <div class="field" style="margin-top:12px;"><label>Réponse (envoyée aussi par e-mail à l'auteur)</label><textarea id="sup-reply" rows="5" maxlength="5000" oninput="state.supReply=this.value" style="width:100%;">${esc(state.supReply||'')}</textarea></div>
+  <button class="btn btn-primary" ${state.busy?'disabled':''} onclick="sendSupReply()">Envoyer la réponse</button>
+  <button class="btn btn-secondary" style="margin-top:8px;" onclick="setSupStatus('${t.status==='closed'?'open':'closed'}')">${t.status==='closed'?'Rouvrir le ticket':'Clore le ticket'}</button>`;
+}
+async function sendSupReply(){
+  const body=(state.supReply||'').trim(); if(!body) return showErr('Écris une réponse');
+  state.busy=true; render();
+  const {data:m,error}=await sb.from('support_messages').insert({ticket_id:state.supOpen,body}).select().single();
+  state.busy=false;
+  if(error){ render(); return showErr(error.message); }
+  try{ await sb.functions.invoke('support-events',{body:{message_id:m.id}}); }catch(e){ console.warn(e); }
+  logAdmin('Réponse support', state.supOpen, {});
+  state.supReply=''; await loadSupport(); await openSupTicket(state.supOpen);
+}
+async function setSupStatus(st){
+  const {error}=await sb.from('support_tickets').update({status:st}).eq('id',state.supOpen);
+  if(error) return showErr(error.message);
+  await loadSupport(); render();
 }
 
 /* =====================================================================

@@ -1323,6 +1323,9 @@ function renderView(){
     case 'batchReturn': return renderBatchReturn();
     case 'refuseLoan': return renderRefuseLoan();
     case 'profile': return renderProfile();
+    case 'supportList': return renderSupportList();
+    case 'supportNew': return renderSupportNew();
+    case 'supportThread': return renderSupportThread();
     case 'transferOwnership': return renderTransferOwnership();
     case 'journal': return renderJournalView();
     case 'export': return renderExport();
@@ -2057,6 +2060,8 @@ function renderProfile(){
     <button class="btn btn-secondary" style="margin-bottom:10px;" onclick="toggleTheme()">${document.documentElement.getAttribute('data-theme')==='light'?'🌙 Passer au thème sombre':'☀️ Passer au thème clair'}</button>
     <a href="manuel-utilisation.pdf?v=12" target="_blank" rel="noopener" class="btn btn-secondary" style="display:block;text-align:center;text-decoration:none;">📖 Manuel d'utilisation</a>`)}
 
+  ${can('gererMembres') ? `<button class="btn btn-secondary" style="margin:10px 0;" onclick="openSupport()">💬 Contacter le support</button>` : ''}
+
   ${acc('roles', '<span>ℹ️ Rôles et droits</span>', `
     <div class="card"><b style="font-size:13px;">Administrateur</b><p class="muted" style="font-size:13px;margin-top:4px;">Accès complet : matériel, membres, prêts, validations.</p></div>
     <div class="card"><b style="font-size:13px;">Vérificateur</b><p class="muted" style="font-size:13px;margin-top:4px;">Comme l'administrateur, sauf modifier/supprimer du matériel directement — passe par une proposition validée par l'administrateur.</p></div>
@@ -2075,6 +2080,88 @@ function renderProfile(){
   <button class="btn btn-secondary" style="margin-top:10px;margin-bottom:20px;" onclick="doLogout()">Se déconnecter</button>
   <div class="brand-sign"><img src="logo-mark.png" alt="">OPTEPIA · Gérez · Contrôlez · Tracez<div style="margin-top:8px;text-transform:none;letter-spacing:0;font-size:12px;"><a href="mentions-legales.html" target="_blank" rel="noopener">Mentions légales</a> · <a href="cgu.html" target="_blank" rel="noopener">CGU</a> · <a href="confidentialite.html" target="_blank" rel="noopener">Confidentialité</a></div></div>
   `;
+}
+
+/* ---------- Support (tickets) : administrateurs et vérificateurs ---------- */
+const SUP_CAT={question:'Question',bug:'Problème / bug',suggestion:'Suggestion',facturation:'Facturation',autre:'Autre'};
+const SUP_ST={open:['En attente','badge-warn'],answered:['Réponse reçue','badge-ok'],closed:['Clos','']};
+function supBadge(st){ const b=SUP_ST[st]||[st,'']; return `<span class="badge ${b[1]}" ${st==='closed'?'style="background:transparent;color:var(--text-muted);"':''}>${b[0]}</span>`; }
+async function openSupport(){
+  state.view='supportList'; state.supTickets=null; render();
+  const {data,error}=await sb.from('support_tickets').select('*').eq('unit_id',state.unit.id).order('updated_at',{ascending:false}).limit(100);
+  state.supTickets=error?[]:data; if(error) showToast('Impossible de charger le support'); else render();
+}
+function renderSupportList(){
+  const t=state.supTickets;
+  return `<div class="backlink" onclick="state.view='profile'; render();">‹ Retour</div>
+  <h2>💬 Support</h2>
+  <p class="muted" style="margin-bottom:14px;">Une question, un problème, une idée ? Écris-nous : nous te répondons ici et par e-mail. Réservé aux administrateurs et vérificateurs de l'unité.</p>
+  <button class="btn btn-primary" style="margin-bottom:14px;" onclick="state.supDraft={subject:'',category:'question',body:''}; state.view='supportNew'; render();">+ Nouveau ticket</button>
+  ${t===null?'<div class="muted" style="text-align:center;padding:20px;"><span class="spinner"></span></div>':
+    t.length===0?'<div class="card muted" style="text-align:center;">Aucun ticket pour le moment.</div>':
+    t.map(x=>`<div class="card" style="cursor:pointer;" onclick="openSupportTicket('${x.id}')">
+      <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;"><b style="font-size:14px;">${esc(x.subject)}</b>${supBadge(x.status)}</div>
+      <div class="muted" style="font-size:12px;margin-top:4px;">${esc(SUP_CAT[x.category]||x.category)} · ${esc(x.author_name||x.author_email||'')} · ${fmtDateTime(x.updated_at)}</div></div>`).join('')}`;
+}
+function renderSupportNew(){
+  const d=state.supDraft||{subject:'',category:'question',body:''};
+  return `<div class="backlink" onclick="state.view='supportList'; render();">‹ Retour</div>
+  <h2>Nouveau ticket</h2>
+  <div class="field"><label>Type de demande</label><select oninput="state.supDraft.category=this.value">${Object.entries(SUP_CAT).map(([k,v])=>`<option value="${k}" ${d.category===k?'selected':''}>${v}</option>`).join('')}</select></div>
+  <div class="field"><label>Sujet</label><input id="sup-subject" maxlength="150" value="${esc(d.subject)}" oninput="state.supDraft.subject=this.value" placeholder="En quelques mots"></div>
+  <div class="field"><label>Message</label><textarea id="sup-body" rows="7" maxlength="5000" oninput="state.supDraft.body=this.value" placeholder="Décris la situation : ce que tu as fait, ce que tu attendais, ce qui s'est passé.">${esc(d.body)}</textarea></div>
+  <p class="muted" style="font-size:12px;margin-bottom:12px;">Ton nom, ton adresse e-mail et le nom de l'unité sont joints automatiquement. Les captures d'écran ne sont pas encore prises en charge : décris simplement ce que tu vois.</p>
+  <button class="btn btn-primary" ${state.busy?'disabled':''} onclick="submitSupportTicket()">${state.busy?'<span class="spinner"></span>':'Envoyer'}</button>`;
+}
+async function supNotify(messageId){
+  try{ await sb.functions.invoke('support-events',{body:{message_id:messageId}}); }catch(e){ console.warn('support-events',e); }
+}
+async function submitSupportTicket(){
+  const d=state.supDraft||{}; const subject=(d.subject||'').trim(), body=(d.body||'').trim();
+  if(subject.length<3) return showToast('Indique un sujet');
+  if(!body) return showToast('Écris ton message');
+  state.busy=true; render();
+  const {data:t,error}=await sb.from('support_tickets').insert({unit_id:state.unit.id,subject,category:d.category||'question'}).select().single();
+  if(error){ state.busy=false; render(); return showToast('Envoi impossible'); }
+  const {data:m,error:e2}=await sb.from('support_messages').insert({ticket_id:t.id,body}).select().single();
+  state.busy=false;
+  if(e2){ render(); return showToast('Envoi impossible'); }
+  supNotify(m.id);
+  state.supDraft=null; showToast('Ticket envoyé ✓'); openSupportTicket(t.id);
+}
+async function openSupportTicket(id){
+  state.view='supportThread'; state.supTicket=(state.supTickets||[]).find(x=>x.id===id)||{id,subject:'…',status:'open'}; state.supMsgs=null; state.supReply=''; render();
+  const [a,b]=await Promise.all([
+    sb.from('support_tickets').select('*').eq('id',id).single(),
+    sb.from('support_messages').select('*').eq('ticket_id',id).order('created_at')]);
+  if(a.data) state.supTicket=a.data; state.supMsgs=b.data||[]; render();
+}
+function renderSupportThread(){
+  const t=state.supTicket, ms=state.supMsgs;
+  return `<div class="backlink" onclick="openSupport()">‹ Mes tickets</div>
+  <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;margin-bottom:4px;"><h2 style="margin:0;">${esc(t.subject)}</h2>${supBadge(t.status)}</div>
+  <div class="muted" style="font-size:12px;margin-bottom:14px;">${esc(SUP_CAT[t.category]||'')} · #${esc(String(t.id).slice(0,8))}</div>
+  ${ms===null?'<div class="muted" style="text-align:center;padding:20px;"><span class="spinner"></span></div>':ms.map(m=>`
+    <div class="card" style="${m.is_staff?'border-color:var(--accent);':''}">
+      <div class="muted" style="font-size:12px;margin-bottom:6px;"><b>${m.is_staff?'Support Optepia':(m.user_id===state.session.user.id?'Moi':esc(t.author_name||'Membre'))}</b> · ${fmtDateTime(m.created_at)}</div>
+      <div style="white-space:pre-wrap;font-size:14px;">${esc(m.body)}</div></div>`).join('')}
+  ${t.status==='closed'?`<button class="btn btn-secondary" onclick="supSetStatus('open')">Rouvrir le ticket</button>`:`
+    <div class="field" style="margin-top:12px;"><label>Ta réponse</label><textarea id="sup-reply" rows="4" maxlength="5000" oninput="state.supReply=this.value">${esc(state.supReply||'')}</textarea></div>
+    <button class="btn btn-primary" ${state.busy?'disabled':''} onclick="sendSupportReply()">${state.busy?'<span class="spinner"></span>':'Envoyer'}</button>
+    <button class="btn btn-secondary" style="margin-top:8px;" onclick="supSetStatus('closed')">Clore le ticket (résolu)</button>`}`;
+}
+async function sendSupportReply(){
+  const body=(state.supReply||'').trim(); if(!body) return showToast('Écris ton message');
+  state.busy=true; render();
+  const {data:m,error}=await sb.from('support_messages').insert({ticket_id:state.supTicket.id,body}).select().single();
+  state.busy=false;
+  if(error){ render(); return showToast('Envoi impossible'); }
+  supNotify(m.id); state.supReply=''; showToast('Message envoyé ✓'); openSupportTicket(state.supTicket.id);
+}
+async function supSetStatus(st){
+  const {error}=await sb.from('support_tickets').update({status:st}).eq('id',state.supTicket.id);
+  if(error) return showToast('Action impossible');
+  showToast(st==='closed'?'Ticket clos':'Ticket rouvert'); openSupportTicket(state.supTicket.id);
 }
 function openTransferOwnership(){ state.view='transferOwnership'; render(); }
 function renderTransferOwnership(){
