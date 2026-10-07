@@ -1307,6 +1307,7 @@ function renderView(){
     case 'loanSheet': return renderLoanSheet();
     case 'inspection': return renderInspection();
     case 'inspectionDoc': return renderInspectionDoc();
+    case 'inventoryDoc': return renderInventoryDoc();
     case 'batchControl': return renderBatchControl();
     case 'list': return renderList();
     case 'trash': return renderTrash();
@@ -2563,12 +2564,108 @@ function renderInspectionDoc(){
   <div class="sheet insp"><div class="insp-w">${sections.join('')}</div></div>`;
 }
 
+
+/* ---- Inventaire par type (PDF / CSV) ---- */
+function invOpts(){ if(!state.inv) state.inv={famille:'',detail:false,hs:true}; return state.inv; }
+function invItems(){
+  const o=invOpts();
+  return state.equipment.filter(e=>!e.deleted_at && (!o.famille || (e.famille||'Sans famille')===o.famille) && (o.hs || !['Hors service','Réformé'].includes(statusOf(e).label)));
+}
+function invGroups(){
+  const groups={};
+  invItems().forEach(e=>{ (groups[groupKey(e)]=groups[groupKey(e)]||[]).push(e); });
+  return Object.keys(groups).map(k=>{
+    const g=groups[k], f=g[0];
+    const cls=x=>statusOf(x).cls;
+    return { famille:f.famille||'Sans famille', sous:f.sous_famille||'', designation:f.designation||'Sans désignation', marque:f.marque||'',
+      items:g.slice().sort((a,b)=>(a.numero_serie||a.identification||'').localeCompare(b.numero_serie||b.identification||'')),
+      n:g.length, ok:g.filter(x=>cls(x)==='badge-ok').length, warn:g.filter(x=>cls(x)==='badge-warn').length, ko:g.filter(x=>cls(x)==='badge-danger').length,
+      out:g.filter(x=>(x.loans||[]).some(l=>l.status==='en_cours')).length };
+  }).sort((a,b)=>a.famille.localeCompare(b.famille)||a.sous.localeCompare(b.sous)||a.designation.localeCompare(b.designation)||a.marque.localeCompare(b.marque));
+}
+function openInventory(){ invOpts(); state.invAt=new Date(); state.view='inventoryDoc'; render(); window.scrollTo(0,0); }
+function exportInventoryCsv(){
+  const o=invOpts(); const G=invGroups(); let headers, rows;
+  if(o.detail){
+    headers=['Famille','Sous-famille','Désignation','Marque','N° série','Identification','Statut','Prochain contrôle','Fin de vie'];
+    rows=[]; G.forEach(g=>g.items.forEach(e=>{ const l=lastCtl(e); rows.push([g.famille,g.sous,g.designation,g.marque,e.numero_serie,e.identification,statusOf(e).label,l?addYears(l.date,1):'',e.date_fin_vie]); }));
+  } else {
+    headers=['Famille','Sous-famille','Désignation','Marque','Quantité','Conformes','À surveiller','Hors service / réformés','Actuellement sortis'];
+    rows=G.map(g=>[g.famille,g.sous,g.designation,g.marque,g.n,g.ok,g.warn,g.ko,g.out]);
+  }
+  const csv=[headers,...rows].map(r=>r.map(v=>`"${String(v===null||v===undefined?'':v).replace(/"/g,'""')}"`).join(';')).join(String.fromCharCode(10));
+  const blob=new Blob([String.fromCharCode(0xFEFF)+csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=url; a.download=`inventaire-${state.unit.name}-${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  showToast('Inventaire CSV téléchargé');
+}
+function renderInventoryDoc(){
+  const o=invOpts(), G=invGroups(), now=state.invAt||new Date();
+  const tot={n:0,ok:0,warn:0,ko:0,out:0}; G.forEach(g=>{ tot.n+=g.n; tot.ok+=g.ok; tot.warn+=g.warn; tot.ko+=g.ko; tot.out+=g.out; });
+  const famCount=new Set(G.map(g=>g.famille)).size;
+  let lastFam=null;
+  const rows=G.map(g=>{
+    const head = g.famille!==lastFam ? `<tr class="fam"><td colspan="9">${esc(g.famille)}</td></tr>` : ''; lastFam=g.famille;
+    const main=`<tr class="typ"><td></td><td>${esc(g.sous)||'—'}</td><td><b>${esc(g.designation)}</b></td><td>${esc(g.marque)||'—'}</td><td class="n">${g.n}</td><td class="n" style="color:#1a8f5f;">${g.ok||'—'}</td><td class="n" style="color:#b97800;">${g.warn||'—'}</td><td class="n" style="color:#c4243a;">${g.ko||'—'}</td><td class="n">${g.out||'—'}</td></tr>`;
+    const det = o.detail ? `<tr class="det"><td></td><td colspan="8"><table class="it" style="margin:2px 0 6px;"><thead><tr><th>N° de série</th><th>Identification</th><th>Statut</th><th>Prochain contrôle</th><th>Fin de vie</th></tr></thead><tbody>${g.items.map(e=>{ const l=lastCtl(e), st=statusOf(e); return `<tr><td>${esc(e.numero_serie||'—')}</td><td>${esc(e.identification||'—')}</td><td style="color:${stColor(st.label)};">${esc(st.label)}</td><td>${l&&!isReformed(e)?fmtDate(addYears(l.date,1)):'—'}</td><td>${fmtDate(e.date_fin_vie)}</td></tr>`; }).join('')}</tbody></table></td></tr>` : '';
+    return head+main+det;
+  }).join('');
+  return `
+  <style>
+    @page{size:A4 landscape;margin:10mm;}
+    .invd{font-size:11px;line-height:1.35;}
+    .invd h2{font-size:18px;margin:0 0 2px;color:#0B1014;} .invd .sub{color:#555;margin:0 0 10px;}
+    .invd .kpis{display:flex;gap:8px;margin:8px 0 12px;} .invd .kpi{flex:1;border:1px solid #c8c8c8;border-radius:6px;padding:7px 10px;} .invd .kpi b{display:block;font-size:19px;color:#0A9FA0;} .invd .kpi span{color:#555;font-size:10.5px;}
+    .invd .it{width:100%;border-collapse:collapse;} .invd .it th,.invd .it td{border:1px solid #c8c8c8;padding:4px 6px;text-align:left;vertical-align:top;}
+    .invd .it th{background:#f2f2f2;font-weight:600;} .invd thead{display:table-header-group;} .invd tr{page-break-inside:avoid;}
+    .invd .inv>tbody>tr.fam>td{background:#e6f5f3;font-weight:700;font-size:12px;border-top:2px solid #0A9FA0;}
+    .invd td.n,.invd th.n{text-align:center;width:7%;}
+    .invd .inv>tbody>tr.det>td{border:none;padding:0 0 0 0;}
+    .invd tr.det{page-break-inside:auto;}
+    .invd .foot{color:#888;font-size:10px;margin-top:10px;}
+    @media print{ .invd .inv>tbody>tr.fam{page-break-after:avoid;} }
+  </style>
+  <div class="noprint">
+    <div class="backlink" onclick="goto('export')">‹ Retour à l'export</div>
+    <button class="btn btn-primary" style="margin-bottom:10px;" onclick="window.print()">🖨 Imprimer / Enregistrer en PDF</button>
+    <p class="muted" style="font-size:12px;margin-bottom:12px;">Dans la fenêtre d'impression, choisis « Enregistrer au format PDF ».</p>
+  </div>
+  <div class="sheet invd">
+    <h2>Inventaire du matériel — ${esc(state.unit.name)}</h2>
+    <p class="sub">Édité le ${now.toLocaleDateString('fr-FR')}${o.famille?' · Famille : '+esc(o.famille):''}${o.hs?'':' · hors matériel hors service / réformé'}</p>
+    <div class="kpis">
+      <div class="kpi"><b>${tot.n}</b><span>article${tot.n>1?'s':''}</span></div>
+      <div class="kpi"><b>${G.length}</b><span>type${G.length>1?'s':''} · ${famCount} famille${famCount>1?'s':''}</span></div>
+      <div class="kpi"><b style="color:#1a8f5f;">${tot.ok}</b><span>conformes</span></div>
+      <div class="kpi"><b style="color:#b97800;">${tot.warn}</b><span>à surveiller</span></div>
+      <div class="kpi"><b style="color:#c4243a;">${tot.ko}</b><span>hors service / réformés</span></div>
+      <div class="kpi"><b>${tot.out}</b><span>actuellement sortis</span></div>
+    </div>
+    ${G.length===0?'<p>Aucun matériel.</p>':`<table class="it inv"><thead><tr><th style="width:3%;"></th><th style="width:15%;">Sous-famille</th><th>Désignation</th><th style="width:15%;">Marque</th><th class="n">Qté</th><th class="n">Conformes</th><th class="n">À surveiller</th><th class="n">Hors service</th><th class="n">Sortis</th></tr></thead><tbody>${rows}
+      <tr><td colspan="4" style="text-align:right;font-weight:700;">TOTAL</td><td class="n"><b>${tot.n}</b></td><td class="n"><b>${tot.ok}</b></td><td class="n"><b>${tot.warn}</b></td><td class="n"><b>${tot.ko}</b></td><td class="n"><b>${tot.out}</b></td></tr></tbody></table>`}
+    <p class="foot">Document généré par Optepia à partir du registre de l’unité. Statuts calculés à la date d’édition.</p>
+  </div>`;
+}
+
 /* ---- Export ---- */
 function renderExport(){
   return `
   <h2>Export du matériel</h2>
   <p class="muted" style="margin-bottom:16px;">Génère une liste au format CSV (compatible tableur).</p>
   <div class="card"><p style="margin-bottom:14px;"><b>${state.equipment.length}</b> article(s) au total</p><button class="btn btn-primary" onclick="exportCsv()">Exporter en CSV</button></div>
+  ${(function(){
+    const o=invOpts(); const fams=Array.from(new Set(state.equipment.filter(e=>!e.deleted_at).map(e=>e.famille||'Sans famille'))).sort();
+    const sel='width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px;font-size:14px;margin-bottom:10px;';
+    return `<h2 style="margin-top:24px;">Inventaire par type</h2>
+  <p class="muted" style="margin-bottom:16px;">Ce que tu possèdes, regroupé par famille et par type de matériel, avec les quantités et l'état du parc.</p>
+  <div class="card">
+    ${fams.length>1?`<select style="${sel}" onchange="invOpts().famille=this.value"><option value="">Toutes les familles</option>${fams.map(f=>`<option value="${esc(f)}" ${o.famille===f?'selected':''}>${esc(f)}</option>`).join('')}</select>`:''}
+    <label style="display:flex;gap:10px;align-items:flex-start;padding:5px 0;font-size:14px;cursor:pointer;"><input type="checkbox" class="ck" ${o.detail?'checked':''} onchange="invOpts().detail=this.checked" style="margin-top:2px;"><span>Détailler chaque article (n° de série, identification, statut)</span></label>
+    <label style="display:flex;gap:10px;align-items:flex-start;padding:5px 0 12px;font-size:14px;cursor:pointer;"><input type="checkbox" class="ck" ${o.hs?'checked':''} onchange="invOpts().hs=this.checked" style="margin-top:2px;"><span>Inclure le matériel hors service ou réformé</span></label>
+    <button class="btn btn-primary" style="margin-bottom:10px;" onclick="openInventory()">📄 Voir / enregistrer en PDF</button>
+    <button class="btn btn-secondary" onclick="exportInventoryCsv()">Exporter en CSV</button>
+  </div>`; })()}
   ${can('creerMateriel') ? `
   <h2 style="margin-top:24px;">Import du matériel</h2>
   <p class="muted" style="margin-bottom:16px;">Ajoute plusieurs fiches d'un coup à partir d'un fichier CSV (désignation, marque, famille, numéro de série, identification, dates — sans photo, fiche technique ni contrôle).</p>
