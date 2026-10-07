@@ -70,6 +70,20 @@
   .user-chip .role{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;display:block;}
   .user-chip .name{font-size:13px;font-weight:600;}
   main{padding:16px;padding-bottom:32px;max-width:640px;margin:0 auto;}
+  main.wide{max-width:1280px;}
+  main.selpad{padding-bottom:130px;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,400px),1fr));gap:12px;align-items:stretch;}
+  .grid>.card{margin-bottom:0;}
+  .list-sticky{position:sticky;top:var(--tb,56px);z-index:6;background:var(--bg);padding:6px 0 8px;margin:-6px 0 6px;}
+  .filter-chips.wrap{flex-wrap:wrap;overflow:visible;}
+  .sel-bar{position:fixed;left:0;right:0;bottom:calc(58px + env(safe-area-inset-bottom));z-index:12;background:var(--surface2);border-top:1px solid var(--accent);padding:9px 14px;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;}
+  .chip:disabled{opacity:.4;}
+  .tbl-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:10px;}
+  .eqt{width:100%;border-collapse:collapse;font-size:13px;}
+  .eqt th{position:sticky;top:0;background:var(--surface2);text-align:left;padding:9px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);cursor:pointer;white-space:nowrap;border-bottom:1px solid var(--border);}
+  .eqt td{padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:middle;}
+  .eqt tbody tr{cursor:pointer;} .eqt tbody tr:hover{background:var(--surface);} .eqt tbody tr.sel{background:var(--ok-bg);}
+  @media(max-width:699px){.desk-only{display:none;}}
   .sheet{background:#fff;color:#111;border-radius:8px;padding:22px;margin-bottom:24px;font-size:13px;line-height:1.45;}
   .sheet-t{width:100%;border-collapse:collapse;margin-bottom:4px;}
   .sheet-t th,.sheet-t td{border:1px solid #c8c8c8;padding:6px 8px;text-align:left;vertical-align:top;}
@@ -246,7 +260,7 @@ let state = {
   session:null, unit:null, role:null, myMemberId:null, myDisplayName:'',
   memberships:[], activeMembershipId:null, pendingActivateUnitId:null,
   members:[], equipment:[], journal:[], changeRequests:[], myAvatarUrl:null, importPreview:{rows:[],errors:[]},
-  detailId:null, search:'', filter:'tous', viewMode:'flat', groupFilter:null, sortMode:'designation',
+  detailId:null, search:'', filter:'tous', viewMode:'flat', groupFilter:null, sortMode:'designation', selMode:false, sel:{}, tableView:false, tableSort:{k:'designation',dir:1},
   mfaFactorId:null, mfaChallengeId:null, mfaFactors:[], mfaEnroll:null,
   loanTab:'pret', checkoutSelection:[], checkoutType:'pret', batchReturn:{}, controlDetailId:null,
   setupMode:'create', qrStatus:null, toast:null, loadError:null,
@@ -1246,7 +1260,7 @@ function render(){
   } else if(state.view==='unitPicker'){
     html = renderUnitPicker();
   } else {
-    html = renderTopbar() + '<main>' + renderView() + '</main>' + renderNav();
+    html = renderTopbar() + '<main class="'+(state.view==='list'?'wide'+(state.selMode?' selpad':''):'')+'">' + renderView() + '</main>' + renderNav();
   }
   if(state.toast) html += `<div class="toast">${esc(state.toast)}</div>`;
   app.innerHTML = html;
@@ -1456,51 +1470,74 @@ function nextControlDueDays(e){
   return daysUntil(addYears(last.date,1));
 }
 function urgencyScore(e){ const s=statusOf(e).cls; return s==='badge-danger'?0:s==='badge-warn'?1:2; }
+function isEligibleControl(e){ const l=statusOf(e).label; return l!=='Hors service' && l!=='Réformé'; }
+function needsCheck(e){ const l=statusOf(e).label; return l==='Contrôle dépassé' || l==='Contrôle proche' || l==='Jamais contrôlé'; }
+function dueParts(e){
+  /* lignes d'échéance d'une fiche : [{t, c}] c = couleur */
+  if(isReformed(e)) return [];
+  const out=[]; const last=lastCtl(e); const dfv=daysUntil(e.date_fin_vie);
+  if(dfv!==null && dfv<0){ out.push({t:'Fin de vie dépassée',c:'var(--danger)'}); return out; }
+  if(!last) out.push({t:'Jamais contrôlé',c:'var(--warn)'});
+  else {
+    const nx=addYears(last.date,1), d=daysUntil(nx);
+    if(d<0) out.push({t:'Contrôle dépassé de '+(-d)+' j',c:'var(--danger)'});
+    else if(d<30) out.push({t:'Contrôle dans '+d+' j',c:'var(--warn)'});
+    else out.push({t:'Prochain contrôle '+fmtDate(nx),c:'var(--text-muted)'});
+  }
+  if(dfv!==null && dfv<60) out.push({t:'Fin de vie dans '+dfv+' j',c:'var(--warn)'});
+  else if(dfv!==null && dfv<=365) out.push({t:'Fin de vie '+fmtDate(e.date_fin_vie),c:'var(--text-muted)'});
+  return out;
+}
+function dueHtml(e){ return dueParts(e).map(p=>`<div style="font-size:12px;margin-top:2px;color:${p.c};">${esc(p.t)}</div>`).join(''); }
+const SORTS = [['designation','Tri : désignation'],['urgence','Tri : urgence'],['controle','Tri : prochain contrôle'],['finvie','Tri : fin de vie'],['recent','Tri : ajouté récemment']];
+const STATUS_FILTERS = [['tous','Statut : tous'],['conforme','Conforme'],['attention','À surveiller'],['acontroler','À contrôler (dépassé, < 30 j, jamais)'],['horsService','Hors service / réformé'],['depasse','Contrôle dépassé'],['proche','Contrôle à faire < 30 j'],['jamais','Jamais contrôlé'],['finvie','Fin de vie < 60 j']];
 function renderList(){
   const c = equipCounts();
   const pendingLoanCount = can('validerPret') ? Object.keys(groupLoansByBatch(allLoans().filter(l=>l.status==='en_attente'))).length : 0;
   const pendingChangeCount = can('validerModificationMateriel') ? state.changeRequests.length : 0;
   const totalPending = pendingLoanCount + pendingChangeCount;
   const trashCount = state.equipment.filter(e=>e.deleted_at).length;
-  const header = `
+  const fams = Array.from(new Set(state.equipment.filter(e=>!e.deleted_at).map(e=>e.famille||'Sans famille'))).sort();
+  const sel = 'flex:1 1 150px;min-width:0;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 8px;font-size:13px;';
+  const nCheck = state.equipment.filter(e=>!e.deleted_at && needsCheck(e)).length;
+  const cnt = {tous:c.tous,conforme:c.conforme,attention:c.attention,horsService:c.horsService,acontroler:nCheck};
+  const flat = state.selMode || state.tableView;
+  return `
   ${totalPending>0?`<div class="card tap" style="border-color:var(--warn);margin-bottom:14px;" onclick="goto('approvals')"><div class="row"><b style="color:var(--warn);">⚠ ${totalPending} validation${totalPending>1?'s':''} en attente</b><span class="muted">›</span></div></div>`:''}
-  ${c.attention>0?`<div class="card tap" style="margin-bottom:14px;" onclick="setFilter('attention')"><div class="row"><b style="color:var(--warn);">🔧 ${c.attention} matériel${c.attention>1?'s':''} à contrôler bientôt</b><span class="muted">›</span></div></div>`:''}
-  <div class="search"><input id="search-input" placeholder="Rechercher désignation, marque, n° série, identification…" value="${esc(state.search)}" oninput="onSearchInput(this.value)"></div>
-  ${(function(){
-    const fams = Array.from(new Set(state.equipment.filter(e=>!e.deleted_at).map(e=>e.famille||'Sans famille'))).sort();
-    const sel = 'flex:1;min-width:0;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 8px;font-size:13px;';
-    return `<div style="display:flex;gap:8px;margin-bottom:10px;">
-      ${fams.length>1?`<select style="${sel}" onchange="state.famFilter=this.value; state.groupFilter=null; render();"><option value="">Toutes les familles</option>${fams.map(f=>`<option value="${esc(f)}" ${state.famFilter===f?'selected':''}>${esc(f)}</option>`).join('')}</select>`:''}
-      <select style="${sel}" onchange="state.availFilter=this.value; render();">
-        <option value="">Disponibilité : toutes</option>
-        <option value="free" ${state.availFilter==='free'?'selected':''}>Disponible</option>
-        <option value="out" ${state.availFilter==='out'?'selected':''}>Sorti (prêt / mission)</option>
-      </select></div>`;
-  })()}
-  <div class="filter-chips">
-    <button class="chip ${state.filter==='tous'?'active':''}" onclick="setFilter('tous')">Tous · ${c.tous}</button>
-    <button class="chip ${state.filter==='conforme'?'active':''}" onclick="setFilter('conforme')">Conforme · ${c.conforme}</button>
-    <button class="chip ${state.filter==='attention'?'active':''}" onclick="setFilter('attention')">À surveiller · ${c.attention}</button>
-    <button class="chip ${state.filter==='horsService'?'active':''}" onclick="setFilter('horsService')">Hors service · ${c.horsService}</button>
-    ${({depasse:'Contrôle dépassé',jamais:'Jamais contrôlé',proche:'Contrôle à faire < 30 j',finvie:'Fin de vie < 60 j'})[state.filter]?`<button class="chip active" onclick="setFilter('tous')">✓ ${({depasse:'Contrôle dépassé',jamais:'Jamais contrôlé',proche:'Contrôle à faire < 30 j',finvie:'Fin de vie < 60 j'})[state.filter]} ✕</button>`:''}
-    <button class="chip ${state.viewMode==='grouped'?'active':''}" onclick="toggleGroupMode()">${state.viewMode==='grouped'?'✓ ':''}Regrouper par type</button>
-    <button class="chip ${state.sortMode==='urgence'?'active':''}" onclick="toggleSortMode()">${state.sortMode==='urgence'?'✓ ':''}Trier par urgence</button>
+  ${c.attention>0&&state.filter!=='attention'?`<div class="card tap" style="margin-bottom:14px;" onclick="setFilter('attention')"><div class="row"><b style="color:var(--warn);">🔧 ${c.attention} matériel${c.attention>1?'s':''} à contrôler bientôt</b><span class="muted">›</span></div></div>`:''}
+  <div class="list-sticky"><div class="search" style="margin:0;"><input id="search-input" placeholder="Rechercher désignation, marque, n° série, identification…" value="${esc(state.search)}" oninput="onSearchInput(this.value)"><button class="btn btn-secondary" style="width:auto;padding:0 14px;flex-shrink:0;" title="Scanner un QR code ou code-barres (photo)" onclick="document.getElementById('scan-in').click()">📷</button><input type="file" id="scan-in" accept="image/*" capture="environment" style="display:none;" onchange="scanSearch(this)"></div></div>
+  <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+    ${fams.length>1?`<select style="${sel}" onchange="state.famFilter=this.value; state.groupFilter=null; render();"><option value="">Toutes les familles</option>${fams.map(f=>`<option value="${esc(f)}" ${state.famFilter===f?'selected':''}>${esc(f)}</option>`).join('')}</select>`:''}
+    <select style="${sel}" onchange="state.availFilter=this.value; render();">
+      <option value="">Disponibilité : toutes</option>
+      <option value="free" ${state.availFilter==='free'?'selected':''}>Disponible</option>
+      <option value="out" ${state.availFilter==='out'?'selected':''}>Sorti (prêt / mission)</option>
+    </select>
+    <select style="${sel}" onchange="setFilter(this.value)">${STATUS_FILTERS.map(f=>`<option value="${f[0]}" ${state.filter===f[0]?'selected':''}>${f[1]}${cnt[f[0]]!==undefined?' · '+cnt[f[0]]:''}</option>`).join('')}</select>
+    ${state.tableView?'':`<select style="${sel}" onchange="state.sortMode=this.value; render();">${SORTS.map(s=>`<option value="${s[0]}" ${state.sortMode===s[0]?'selected':''}>${s[1]}</option>`).join('')}</select>`}
+  </div>
+  <div class="filter-chips wrap">
+    ${flat?'':`<button class="chip ${state.viewMode==='grouped'?'active':''}" onclick="toggleGroupMode()">${state.viewMode==='grouped'?'✓ ':''}Regrouper par type</button>`}
+    ${state.selMode?'':`<button class="chip desk-only ${state.tableView?'active':''}" onclick="toggleTableView()">${state.tableView?'✓ ':''}Vue tableau</button>`}
+    <button class="chip ${state.selMode?'active':''}" onclick="toggleSelMode()">${state.selMode?'✓ ':''}Sélectionner</button>
     ${can('ajouterControle')?`<button class="chip" onclick="startBatchControl()">✔ Contrôle groupé</button>`:''}
     <button class="chip" onclick="goto('export')">📤 Export</button>
     ${can('creerMateriel')?`<button class="chip" onclick="goto('trash')">🗑 Corbeille${trashCount>0?' · '+trashCount:''}</button>`:''}
   </div>
-  <div id="equip-results">${renderListResults()}</div>`;
-  return header;
+  <div id="equip-results" class="${state.tableView?'':'grid'}">${renderListResults()}</div>
+  <div id="sel-bar" class="sel-bar" style="display:none;"></div>`;
 }
-function toggleSortMode(){ state.sortMode = state.sortMode==='urgence' ? 'designation' : 'urgence'; render(); }
+function setSort(v){ state.sortMode=v; render(); }
+function toggleTableView(){ state.tableView=!state.tableView; state.groupFilter=null; render(); }
+function toggleSelMode(){ state.selMode=!state.selMode; state.sel={}; state.groupFilter=null; render(); }
 function onSearchInput(v){
   state.search = v;
   const el = document.getElementById('equip-results');
   if(el) el.innerHTML = renderListResults();
 }
-function renderListResults(){
+function listItems(){
   const q = state.search.toLowerCase();
-  let items = state.equipment.filter(e=>{
+  const items = state.equipment.filter(e=>{
     if(e.deleted_at) return false;
     if(q && !(`${e.designation} ${e.marque} ${e.numero_serie} ${e.identification}`.toLowerCase().includes(q))) return false;
     if(state.famFilter && (e.famille||'Sans famille')!==state.famFilter) return false;
@@ -1511,29 +1548,51 @@ function renderListResults(){
     if(state.filter==='conforme') return statusOf(e).cls==='badge-ok';
     if(state.filter==='attention') return statusOf(e).cls==='badge-warn';
     if(state.filter==='horsService') return statusOf(e).cls==='badge-danger';
+    if(state.filter==='acontroler') return needsCheck(e);
     if(state.filter==='depasse') return lbl==='Contrôle dépassé';
     if(state.filter==='jamais') return lbl==='Jamais contrôlé';
     if(state.filter==='proche') return lbl==='Contrôle proche';
     if(state.filter==='finvie') return lbl!=='Hors service' && lbl!=='Réformé' && dfv!==null && dfv>=0 && dfv<60;
     return true;
-  }).slice().sort((a,b)=>{
-    if(state.sortMode==='urgence'){
-      const d = urgencyScore(a)-urgencyScore(b);
-      if(d!==0) return d;
-      return nextControlDueDays(a)-nextControlDueDays(b);
-    }
-    return (a.designation||'').localeCompare(b.designation||'');
   });
-  if(items.length===0){
-    return `<div class="empty"><h3>Aucun matériel</h3><p>${can('creerMateriel')?"Ajoute une première fiche depuis l'onglet « Ajouter ».":'Aucune fiche pour le moment.'}</p></div>`;
+  const dsg = (a,b)=>(a.designation||'').localeCompare(b.designation||'');
+  const fv = e=>{ const d=daysUntil(e.date_fin_vie); return d===null?999999:d; };
+  if(state.tableView){
+    const k=state.tableSort.k, dir=state.tableSort.dir;
+    const val={
+      designation:e=>(e.designation||'').toLowerCase(), marque:e=>(e.marque||'').toLowerCase(), serie:e=>(e.numero_serie||'').toLowerCase(), ident:e=>(e.identification||'').toLowerCase(),
+      last:e=>{ const l=lastCtl(e); return l?l.date:''; }, next:e=>nextControlDueDays(e), finvie:fv, statut:e=>urgencyScore(e)
+    }[k]||(e=>0);
+    return items.sort((a,b)=>{ const x=val(a), y=val(b); const r = x<y?-1:x>y?1:0; return (r||dsg(a,b))*dir; });
   }
-  if(state.viewMode==='grouped' && !state.groupFilter){
+  return items.sort((a,b)=>{
+    if(state.sortMode==='urgence'){ const d=urgencyScore(a)-urgencyScore(b); return d!==0?d:(nextControlDueDays(a)-nextControlDueDays(b)||dsg(a,b)); }
+    if(state.sortMode==='controle') return (nextControlDueDays(a)-nextControlDueDays(b))||dsg(a,b);
+    if(state.sortMode==='finvie') return (fv(a)-fv(b))||dsg(a,b);
+    if(state.sortMode==='recent') return (b.created_at||'').localeCompare(a.created_at||'')||dsg(a,b);
+    return dsg(a,b);
+  });
+}
+function renderListResults(){
+  const items = listItems();
+  setTimeout(updateSelBar,0);
+  if(items.length===0){
+    return `<div class="empty" style="grid-column:1/-1;"><h3>Aucun matériel</h3><p>${state.equipment.some(e=>!e.deleted_at)?'Aucun résultat avec ces filtres.':can('creerMateriel')?"Ajoute une première fiche depuis l'onglet « Ajouter ».":'Aucune fiche pour le moment.'}</p></div>`;
+  }
+  if(state.tableView) return renderEquipTable(items);
+  if(state.viewMode==='grouped' && !state.groupFilter && !state.selMode){
     const groups = {};
     items.forEach(e=>{ const k=groupKey(e); (groups[k]=groups[k]||[]).push(e); });
     return Object.keys(groups).sort().map(k=>{
       const g = groups[k]; const first = g[0];
       const worst = g.some(e=>statusOf(e).cls==='badge-danger') ? 'badge-danger' : g.some(e=>statusOf(e).cls==='badge-warn') ? 'badge-warn' : 'badge-ok';
       const worstLabel = worst==='badge-danger'?'À vérifier':worst==='badge-warn'?'À surveiller':'Conforme';
+      const chk = g.filter(needsCheck), over = g.filter(e=>statusOf(e).label==='Contrôle dépassé').length;
+      let due;
+      if(chk.length) due = `<div style="font-size:12px;margin-top:2px;color:${over?'var(--danger)':'var(--warn)'};">${chk.length} à contrôler${over?' · '+over+' dépassé'+(over>1?'s':''):''}</div>`;
+      else { const nx = g.map(e=>{ const l=lastCtl(e); return l?addYears(l.date,1):null; }).filter(Boolean).sort()[0]; due = nx?`<div style="font-size:12px;margin-top:2px;color:var(--text-muted);">Prochain contrôle ${fmtDate(nx)}</div>`:''; }
+      const eol = g.filter(e=>{ const d=daysUntil(e.date_fin_vie); return isEligibleControl(e) && d!==null && d>=0 && d<60; }).length;
+      if(eol) due += `<div style="font-size:12px;margin-top:2px;color:var(--warn);">${eol} fin de vie proche</div>`;
       return `
       <div class="card tap" onclick="state.groupFilter='${k.replace(/'/g,"\'")}'; render();">
         <div class="row">
@@ -1542,6 +1601,7 @@ function renderListResults(){
             <div>
               <div style="font-weight:600;font-size:15px;">${esc(first.designation)||'Sans désignation'}</div>
               <div class="muted">${esc(first.marque)||'—'}${first.famille?' · '+esc(first.famille):''}${first.sous_famille?' · '+esc(first.sous_famille):''}</div>
+              ${due}
               ${(function(){ const n=g.filter(x=>(x.loans||[]).some(l=>l.status==='en_cours'||l.status==='en_attente')).length; return n?`<div style="font-size:12px;color:var(--warn);">${n} sorti${n>1?'s':''}</div>`:''; })()}
             </div>
           </div>
@@ -1555,24 +1615,42 @@ function renderListResults(){
   }
   if(state.groupFilter){
     const filtered = items.filter(e=>groupKey(e)===state.groupFilter);
-    return `<div class="backlink" onclick="state.groupFilter=null; render();">‹ Retour aux types de matériel</div>` + filtered.map(renderEquipRow).join('');
+    return `<div class="backlink" style="grid-column:1/-1;" onclick="state.groupFilter=null; render();">‹ Retour aux types de matériel</div>` + filtered.map(renderEquipRow).join('');
   }
   return items.map(renderEquipRow).join('');
 }
 function toggleGroupMode(){ state.viewMode = state.viewMode==='grouped' ? 'flat' : 'grouped'; state.groupFilter=null; render(); }
+function tableSortBy(k){ const t=state.tableSort; if(t.k===k) t.dir=-t.dir; else { t.k=k; t.dir=1; } const el=document.getElementById('equip-results'); if(el) el.innerHTML=renderListResults(); }
+function renderEquipTable(items){
+  const cols=[['designation','Désignation'],['serie','N° série'],['ident','Identification'],['last','Dernier contrôle'],['next','Prochain contrôle'],['finvie','Fin de vie'],['statut','Statut']];
+  const t=state.tableSort, arrow=k=>t.k===k?(t.dir>0?' ▲':' ▼'):'';
+  return `<div class="tbl-wrap"><table class="eqt"><thead><tr>${state.selMode?`<th style="width:30px;"><input type="checkbox" class="ck" onchange="selAllVisible(this.checked)" ${items.length&&items.every(e=>state.sel[e.id])?'checked':''}></th>`:''}${cols.map(c=>`<th onclick="tableSortBy('${c[0]}')">${c[1]}${arrow(c[0])}</th>`).join('')}</tr></thead><tbody>
+  ${items.map(e=>{ const s=statusOf(e), l=lastCtl(e), nx=l?addYears(l.date,1):null, d=nx?daysUntil(nx):null, dfv=daysUntil(e.date_fin_vie);
+    const nc = !l?'<span style="color:var(--warn);">Jamais</span>':`<span style="color:${d<0?'var(--danger)':d<30?'var(--warn)':'inherit'};">${fmtDate(nx)}</span>`;
+    return `<tr class="${state.sel[e.id]?'sel':''}" onclick="${state.selMode?`toggleSel('${e.id}')`:`openDetail('${e.id}')`}">${state.selMode?`<td><input type="checkbox" class="ck" ${state.sel[e.id]?'checked':''} onclick="event.stopPropagation();toggleSel('${e.id}')"></td>`:''}
+    <td><b>${esc(e.designation)||'Sans désignation'}</b>${e.marque?` <span class="muted">· ${esc(e.marque)}</span>`:''}${e.taille?` <span class="muted">· ${esc(e.taille)}</span>`:''}</td>
+    <td class="mono">${esc(e.numero_serie)||'—'}</td><td class="mono">${esc(e.identification)||'—'}</td>
+    <td>${l?fmtDate(l.date):'—'}</td><td>${isReformed(e)?'—':nc}</td>
+    <td style="color:${dfv!==null&&dfv<0?'var(--danger)':dfv!==null&&dfv<60?'var(--warn)':'inherit'};">${e.date_fin_vie?fmtDate(e.date_fin_vie):'—'}</td>
+    <td><span class="badge ${s.cls}">${s.label}</span></td></tr>`; }).join('')}
+  </tbody></table></div>`;
+}
 function renderEquipRow(e){
   const s = statusOf(e);
   const onLoan = (e.loans||[]).some(l=>l.status==='en_cours');
   const onPending = (e.loans||[]).some(l=>l.status==='en_attente');
+  const on = !!state.sel[e.id];
   return `
-  <div class="card tap" onclick="openDetail('${e.id}')">
+  <div class="card tap" ${on?'style="border-color:var(--accent);"':''} onclick="${state.selMode?`toggleSel('${e.id}')`:`openDetail('${e.id}')`}">
     <div class="row">
       <div class="row" style="gap:12px;flex:1;min-width:0;justify-content:flex-start;">
+        ${state.selMode?`<input type="checkbox" class="ck" ${on?'checked':''} onclick="event.stopPropagation();toggleSel('${e.id}')" style="width:20px;height:20px;flex-shrink:0;accent-color:var(--accent);">`:''}
         ${e.photo_url ? `<img class="thumb" src="${imgSrc(e.photo_url)}">` : `<div class="thumb"></div>`}
         <div style="min-width:0;flex:1;overflow-wrap:break-word;">
           <div style="font-weight:600;font-size:15px;">${esc(e.designation)||'Sans désignation'}</div>
           <div class="muted">${esc(e.marque)||'—'}${e.taille?' · '+esc(e.taille):''}</div>
           <div class="mono muted" style="margin-top:2px;">${equipIds(e)||'—'}</div>
+          ${dueHtml(e)}
           ${(function(){ const cur=(e.loans||[]).find(l=>l.status==='en_cours')||(e.loans||[]).find(l=>l.status==='en_attente'); return cur?`<div style="font-size:12px;margin-top:3px;color:var(--warn);">${cur.type==='mission'?'🎯 Mission : ':'📤 Prêté à '}${esc(cur.borrower_name)}${cur.status==='en_attente'?' (à valider)':''}</div>`:''; })()}
         </div>
       </div>
@@ -1582,6 +1660,50 @@ function renderEquipRow(e){
       </div>
     </div>
   </div>`;
+}
+/* ---- Sélection multiple ---- */
+function toggleSel(id){ if(state.sel[id]) delete state.sel[id]; else state.sel[id]=true; const el=document.getElementById('equip-results'); if(el) el.innerHTML=renderListResults(); }
+function selAllVisible(on){ const items=listItems(); state.sel={}; if(on) items.forEach(e=>{ state.sel[e.id]=true; }); const el=document.getElementById('equip-results'); if(el) el.innerHTML=renderListResults(); }
+function selIds(){ return Object.keys(state.sel).filter(id=>state.equipment.some(e=>e.id===id&&!e.deleted_at)); }
+function updateSelBar(){
+  const bar=document.getElementById('sel-bar'); if(!bar) return;
+  if(!state.selMode){ bar.style.display='none'; return; }
+  const n=selIds().length, tot=listItems().length;
+  bar.style.display='flex';
+  bar.innerHTML = `<b style="font-size:13px;margin-right:auto;">${n} sélectionné${n>1?'s':''}</b>
+    <button class="chip" onclick="selAllVisible(${n<tot})">${n<tot?'Tout ('+tot+')':'Aucun'}</button>
+    ${can('ajouterControle')?`<button class="chip" ${n?'':'disabled'} onclick="selBatchControl()">✔ Contrôler</button>`:''}
+    <button class="chip" ${n?'':'disabled'} onclick="exportCsv(selIds())">CSV</button>
+    ${can('supprimerMateriel')?`<button class="chip" style="color:var(--danger);" ${n?'':'disabled'} onclick="selTrash()">🗑</button>`:''}
+    <button class="chip" onclick="toggleSelMode()">✕</button>`;
+}
+function selBatchControl(){
+  const ids=selIds().filter(id=>isEligibleControl(state.equipment.find(e=>e.id===id)));
+  if(!ids.length){ showToast('Aucun article contrôlable dans la sélection (hors service ou réformé)'); return; }
+  startBatchControl(ids);
+}
+async function selTrash(){
+  const ids=selIds(); if(!ids.length) return;
+  const reason = await askReason('Mettre '+ids.length+' article'+(ids.length>1?'s':'')+' à la corbeille ?', "Les fiches iront à la corbeille : tu pourras les restaurer, et elles ne pourront être supprimées définitivement qu'après "+TRASH_DAYS+" jours. Le motif sera enregistré pour chacune.", 'Mettre à la corbeille');
+  if(!reason) return;
+  state.busy=true;
+  const { error } = await sb.from('equipment').update({deleted_at:new Date().toISOString(), delete_reason:reason}).in('id', ids);
+  state.busy=false;
+  if(error){ showToast(error.message); return; }
+  state.sel={}; state.selMode=false;
+  await refreshAll(); render(); showToast(ids.length+' fiche'+(ids.length>1?'s':'')+' déplacée'+(ids.length>1?'s':'')+' vers la corbeille');
+}
+async function scanSearch(inp){
+  const f=inp.files&&inp.files[0]; inp.value=''; if(!f) return;
+  showToast('Lecture du code…');
+  const url = await new Promise(r=>{ const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.onerror=()=>r(null); fr.readAsDataURL(f); });
+  const raw = url ? await decodeQrFromDataUrl(url) : null;
+  if(!raw){ showToast('Code non reconnu — rapproche-toi ou améliore la lumière'); return; }
+  const p = parseScanned(raw) || {};
+  state.search = p.numero_serie || p.identification || String(raw).trim();
+  state.groupFilter=null; render();
+  const n = listItems().length;
+  showToast(n?n+' résultat'+(n>1?'s':'')+' pour « '+state.search+' »':'Aucune fiche pour « '+state.search+' »');
 }
 function renderDetail(){
   const e = state.equipment.find(x=>x.id===state.detailId);
@@ -2592,9 +2714,9 @@ async function confirmImport(){
   }catch(err){ showToast(err.message); }
   state.busy=false; render();
 }
-function exportCsv(){
+function exportCsv(ids){
   const headers = ['Désignation','Marque','N° série','Identification','Date fabrication','Date 1ère utilisation','Date fin de vie','Statut','Dernier contrôle','Dernier vérificateur','Créé par'];
-  const rows = state.equipment.map(e=>{
+  const rows = state.equipment.filter(e=>!Array.isArray(ids)||ids.includes(e.id)).map(e=>{
     const last = (e.controls||[]).slice().sort((a,b)=>b.date.localeCompare(a.date))[0];
     return [e.designation,e.marque,e.numero_serie,e.identification,e.date_fabrication,e.date_premiere_utilisation,e.date_fin_vie,statusOf(e).label,last?last.date:'',last?last.verificateur_name:'',e.created_by_name];
   });
@@ -3475,8 +3597,9 @@ function renderLoanSheet(){
 }
 
 /* ---------- Contrôle groupé ---------- */
-function startBatchControl(){
+function startBatchControl(ids){
   state.bc = { sel:{}, date:new Date().toISOString().slice(0,10), verif:state.myDisplayName, obs:'' };
+  if(Array.isArray(ids)) ids.forEach(id=>{ state.bc.sel[id]='conforme'; });
   state.view='batchControl'; render(); window.scrollTo(0,0);
 }
 function renderBatchControl(){
@@ -3508,7 +3631,7 @@ function renderBatchControl(){
     <div class="card bc-item" data-id="${e.id}" data-need="${need?1:0}" data-q="${esc(((e.designation||'')+' '+(e.marque||'')+' '+(e.numero_serie||'')+' '+(e.identification||'')).toLowerCase())}">
       <div class="row" style="align-items:flex-start;gap:10px;">
         <label style="display:flex;gap:10px;align-items:flex-start;flex:1;min-width:0;cursor:pointer;">
-          <input type="checkbox" onchange="bcToggle('${e.id}',this.checked)" style="width:20px;height:20px;flex-shrink:0;margin-top:2px;accent-color:var(--accent);">
+          <input type="checkbox" ${bc.sel[e.id]!==undefined?'checked':''} onchange="bcToggle('${e.id}',this.checked)" style="width:20px;height:20px;flex-shrink:0;margin-top:2px;accent-color:var(--accent);">
           <div style="min-width:0;">
             <div style="font-weight:600;font-size:14px;">${esc(e.designation)||'Sans désignation'}${e.marque?' <span class="muted" style="font-weight:400;">· '+esc(e.marque)+'</span>':''}</div>
             <div class="mono muted" style="font-size:12px;">${equipIds(e)||'—'}</div>
@@ -3577,6 +3700,7 @@ async function saveBatchControl(){
 
 /* ---------- Post-render wiring ---------- */
 function afterRender(){
+  { const tb=document.querySelector('.topbar'); if(tb) document.documentElement.style.setProperty('--tb', tb.offsetHeight+'px'); }
   if(state.view==='auth' && typeof turnstile==='undefined' && !window.__tsRetry){ window.__tsRetry=setTimeout(function(){ window.__tsRetry=null; if(typeof turnstile!=='undefined') afterRender(); },800); }
   if(state.view==='auth' && (state.authMode==='signup' || state.authMode==='login' || state.authMode==='forgot') && typeof turnstile!=='undefined'){
     const el = document.querySelector('.cf-turnstile');
