@@ -2058,7 +2058,7 @@ function renderProfile(){
 
   ${acc('prefs', '<span>⚙️ Affichage et aide</span>', `
     <button class="btn btn-secondary" style="margin-bottom:10px;" onclick="toggleTheme()">${document.documentElement.getAttribute('data-theme')==='light'?'🌙 Passer au thème sombre':'☀️ Passer au thème clair'}</button>
-    <a href="manuel-utilisation.pdf?v=12" target="_blank" rel="noopener" class="btn btn-secondary" style="display:block;text-align:center;text-decoration:none;">📖 Manuel d'utilisation</a>`)}
+    <a href="manuel-utilisation.pdf?v=13" target="_blank" rel="noopener" class="btn btn-secondary" style="display:block;text-align:center;text-decoration:none;">📖 Manuel d'utilisation</a>`)}
 
   ${can('gererMembres') ? `<button class="btn btn-secondary" style="margin:10px 0;" onclick="openSupport()">💬 Contacter le support</button>` : ''}
 
@@ -2096,7 +2096,7 @@ function renderSupportList(){
   return `<div class="backlink" onclick="state.view='profile'; render();">‹ Retour</div>
   <h2>💬 Support</h2>
   <p class="muted" style="margin-bottom:14px;">Une question, un problème, une idée ? Écris-nous : nous te répondons ici et par e-mail. Réservé aux administrateurs et vérificateurs de l'unité.</p>
-  <button class="btn btn-primary" style="margin-bottom:14px;" onclick="state.supDraft={subject:'',category:'question',body:''}; state.view='supportNew'; render();">+ Nouveau ticket</button>
+  <button class="btn btn-primary" style="margin-bottom:14px;" onclick="state.supDraft={subject:'',category:'question',body:''}; state.supFiles=[]; state.view='supportNew'; render();">+ Nouveau ticket</button>
   ${t===null?'<div class="muted" style="text-align:center;padding:20px;"><span class="spinner"></span></div>':
     t.length===0?'<div class="card muted" style="text-align:center;">Aucun ticket pour le moment.</div>':
     t.map(x=>`<div class="card" style="cursor:pointer;" onclick="openSupportTicket('${x.id}')">
@@ -2110,27 +2110,86 @@ function renderSupportNew(){
   <div class="field"><label>Type de demande</label><select oninput="state.supDraft.category=this.value">${Object.entries(SUP_CAT).map(([k,v])=>`<option value="${k}" ${d.category===k?'selected':''}>${v}</option>`).join('')}</select></div>
   <div class="field"><label>Sujet</label><input id="sup-subject" maxlength="150" value="${esc(d.subject)}" oninput="state.supDraft.subject=this.value" placeholder="En quelques mots"></div>
   <div class="field"><label>Message</label><textarea id="sup-body" rows="7" maxlength="5000" oninput="state.supDraft.body=this.value" placeholder="Décris la situation : ce que tu as fait, ce que tu attendais, ce qui s'est passé.">${esc(d.body)}</textarea></div>
-  <p class="muted" style="font-size:12px;margin-bottom:12px;">Ton nom, ton adresse e-mail et le nom de l'unité sont joints automatiquement. Les captures d'écran ne sont pas encore prises en charge : décris simplement ce que tu vois.</p>
+  ${supFilesPicker()}
+  <p class="muted" style="font-size:12px;margin-bottom:12px;">Ton nom, ton adresse e-mail et le nom de l'unité sont joints automatiquement.</p>
   <button class="btn btn-primary" ${state.busy?'disabled':''} onclick="submitSupportTicket()">${state.busy?'<span class="spinner"></span>':'Envoyer'}</button>`;
+}
+
+/* ---- Pièces jointes du support ---- */
+const SUP_MAX_FILES=3, SUP_MAX_BYTES=5*1024*1024;
+function supPickFiles(inp){
+  const cur=state.supFiles||[]; const err=[];
+  for(const f of inp.files){
+    if(cur.length>=SUP_MAX_FILES){ err.push('3 fichiers maximum'); break; }
+    if(!/^(image\/(jpeg|png|webp)|application\/pdf)$/.test(f.type)){ err.push(f.name+' : format non pris en charge'); continue; }
+    cur.push(f);
+  }
+  inp.value=''; state.supFiles=cur; supSyncDraft(); render(); if(err.length) showToast(err[0]);
+}
+function supRmFile(i){ state.supFiles.splice(i,1); supSyncDraft(); render(); }
+function supSyncDraft(){ const s=document.getElementById('sup-subject'), b=document.getElementById('sup-body'), r=document.getElementById('sup-reply'); if(s&&state.supDraft) state.supDraft.subject=s.value; if(b&&state.supDraft) state.supDraft.body=b.value; if(r) state.supReply=r.value; }
+function supFilesPicker(){
+  const fs=state.supFiles||[];
+  return `<div class="field"><label>Pièces jointes (facultatif)</label>
+    ${fs.map((f,i)=>`<div class="card" style="display:flex;align-items:center;gap:8px;padding:8px 10px;margin-bottom:6px;"><span style="flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📎 ${esc(f.name)}</span><span class="muted" style="font-size:12px;">${Math.max(1,Math.round(f.size/1024))} Ko</span><button type="button" class="btn btn-ghost" style="width:auto;padding:4px 10px;" onclick="supRmFile(${i})">✕</button></div>`).join('')}
+    ${fs.length<SUP_MAX_FILES?`<label class="btn btn-secondary" style="display:block;text-align:center;cursor:pointer;">+ Ajouter une photo ou un PDF<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple style="display:none;" onchange="supPickFiles(this)"></label>`:''}
+    <p class="muted" style="font-size:12px;margin-top:6px;">Images (JPG, PNG, WebP) ou PDF · 3 fichiers, 5 Mo chacun.</p></div>`;
+}
+async function supShrink(f){
+  if(f.type==='application/pdf') return f;
+  try{
+    const bmp=await createImageBitmap(f); const sc=Math.min(1,1600/Math.max(bmp.width,bmp.height));
+    if(sc===1 && f.size<=1.5*1024*1024) return f;
+    const c=document.createElement('canvas'); c.width=Math.round(bmp.width*sc); c.height=Math.round(bmp.height*sc);
+    c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);
+    const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',0.85));
+    return blob?new File([blob],f.name.replace(/\.\w+$/,'')+'.jpg',{type:'image/jpeg'}):f;
+  }catch(e){ return f; }
+}
+async function supUploadFiles(ticketId){
+  const out=[];
+  for(const f0 of (state.supFiles||[])){
+    const f=await supShrink(f0);
+    if(f.size>SUP_MAX_BYTES) throw new Error(f0.name+' dépasse 5 Mo');
+    const ext=(f.name.split('.').pop()||'bin').toLowerCase().replace(/[^a-z0-9]/g,'');
+    const path=ticketId+'/'+(crypto.randomUUID?crypto.randomUUID():Date.now()+''+Math.random().toString(16).slice(2))+'.'+ext;
+    const {error}=await sb.storage.from('support-files').upload(path,f,{contentType:f.type});
+    if(error) throw error;
+    out.push({path,name:f0.name,type:f.type,size:f.size});
+  }
+  return out;
+}
+async function supOpenFile(path){
+  const {data,error}=await sb.storage.from('support-files').createSignedUrl(path,300);
+  if(error||!data) return alert('Fichier indisponible');
+  window.open(data.signedUrl,'_blank','noopener');
+}
+function supAttachHtml(m){
+  const a=m.attachments||[]; if(!a.length) return '';
+  return `<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;">${a.map(x=>`<button type="button" class="btn btn-secondary" style="width:auto;padding:6px 10px;font-size:12px;" onclick="supOpenFile('${esc(x.path)}')">📎 ${esc(x.name)}</button>`).join('')}</div>`;
 }
 async function supNotify(messageId){
   try{ await sb.functions.invoke('support-events',{body:{message_id:messageId}}); }catch(e){ console.warn('support-events',e); }
 }
 async function submitSupportTicket(){
-  const d=state.supDraft||{}; const subject=(d.subject||'').trim(), body=(d.body||'').trim();
+  supSyncDraft();
+  const d=state.supDraft||{}; const subject=(d.subject||'').trim(); let body=(d.body||'').trim();
   if(subject.length<3) return showToast('Indique un sujet');
-  if(!body) return showToast('Écris ton message');
+  if(!body && !(state.supFiles||[]).length) return showToast('Écris ton message');
+  if(!body) body='(pièce jointe)';
   state.busy=true; render();
   const {data:t,error}=await sb.from('support_tickets').insert({unit_id:state.unit.id,subject,category:d.category||'question'}).select().single();
   if(error){ state.busy=false; render(); return showToast('Envoi impossible'); }
-  const {data:m,error:e2}=await sb.from('support_messages').insert({ticket_id:t.id,body}).select().single();
+  let atts=[], upErr=null;
+  try{ atts=await supUploadFiles(t.id); }catch(e){ upErr=e.message||'échec'; }
+  const {data:m,error:e2}=await sb.from('support_messages').insert({ticket_id:t.id,body,attachments:atts}).select().single();
   state.busy=false;
   if(e2){ render(); return showToast('Envoi impossible'); }
   supNotify(m.id);
-  state.supDraft=null; showToast('Ticket envoyé ✓'); openSupportTicket(t.id);
+  state.supDraft=null; state.supFiles=[]; showToast(upErr?'Ticket envoyé, mais pièce jointe refusée':'Ticket envoyé ✓'); openSupportTicket(t.id);
 }
 async function openSupportTicket(id){
-  state.view='supportThread'; state.supTicket=(state.supTickets||[]).find(x=>x.id===id)||{id,subject:'…',status:'open'}; state.supMsgs=null; state.supReply=''; render();
+  state.view='supportThread'; state.supTicket=(state.supTickets||[]).find(x=>x.id===id)||{id,subject:'…',status:'open'}; state.supMsgs=null; state.supReply=''; state.supFiles=[]; render();
   const [a,b]=await Promise.all([
     sb.from('support_tickets').select('*').eq('id',id).single(),
     sb.from('support_messages').select('*').eq('ticket_id',id).order('created_at')]);
@@ -2144,19 +2203,24 @@ function renderSupportThread(){
   ${ms===null?'<div class="muted" style="text-align:center;padding:20px;"><span class="spinner"></span></div>':ms.map(m=>`
     <div class="card" style="${m.is_staff?'border-color:var(--accent);':''}">
       <div class="muted" style="font-size:12px;margin-bottom:6px;"><b>${m.is_staff?'Support Optepia':(m.user_id===state.session.user.id?'Moi':esc(t.author_name||'Membre'))}</b> · ${fmtDateTime(m.created_at)}</div>
-      <div style="white-space:pre-wrap;font-size:14px;">${esc(m.body)}</div></div>`).join('')}
+      <div style="white-space:pre-wrap;font-size:14px;">${m.body==='(pièce jointe)'?'':esc(m.body)}</div>${supAttachHtml(m)}</div>`).join('')}
   ${t.status==='closed'?`<button class="btn btn-secondary" onclick="supSetStatus('open')">Rouvrir le ticket</button>`:`
     <div class="field" style="margin-top:12px;"><label>Ta réponse</label><textarea id="sup-reply" rows="4" maxlength="5000" oninput="state.supReply=this.value">${esc(state.supReply||'')}</textarea></div>
+    ${supFilesPicker()}
     <button class="btn btn-primary" ${state.busy?'disabled':''} onclick="sendSupportReply()">${state.busy?'<span class="spinner"></span>':'Envoyer'}</button>
     <button class="btn btn-secondary" style="margin-top:8px;" onclick="supSetStatus('closed')">Clore le ticket (résolu)</button>`}`;
 }
 async function sendSupportReply(){
-  const body=(state.supReply||'').trim(); if(!body) return showToast('Écris ton message');
+  supSyncDraft();
+  let body=(state.supReply||'').trim(); if(!body && !(state.supFiles||[]).length) return showToast('Écris ton message');
+  if(!body) body='(pièce jointe)';
   state.busy=true; render();
-  const {data:m,error}=await sb.from('support_messages').insert({ticket_id:state.supTicket.id,body}).select().single();
+  let atts=[];
+  try{ atts=await supUploadFiles(state.supTicket.id); }catch(e){ state.busy=false; render(); return showToast('Pièce jointe : '+(e.message||'échec')); }
+  const {data:m,error}=await sb.from('support_messages').insert({ticket_id:state.supTicket.id,body,attachments:atts}).select().single();
   state.busy=false;
   if(error){ render(); return showToast('Envoi impossible'); }
-  supNotify(m.id); state.supReply=''; showToast('Message envoyé ✓'); openSupportTicket(state.supTicket.id);
+  supNotify(m.id); state.supReply=''; state.supFiles=[]; showToast('Message envoyé ✓'); openSupportTicket(state.supTicket.id);
 }
 async function supSetStatus(st){
   const {error}=await sb.from('support_tickets').update({status:st}).eq('id',state.supTicket.id);

@@ -1167,6 +1167,60 @@ function renderLogView(){
 const SUP_CAT={question:'Question',bug:'Problème / bug',suggestion:'Suggestion',facturation:'Facturation',autre:'Autre'};
 const SUP_ST={open:'À traiter',answered:'Répondu',closed:'Clos'};
 function supBadge(st){ const c=st==='open'?'var(--warn)':st==='answered'?'var(--ok)':'var(--text-muted)'; return `<span style="font-size:11px;font-weight:700;color:${c};border:1px solid ${c};border-radius:99px;padding:2px 8px;white-space:nowrap;">${SUP_ST[st]||st}</span>`; }
+
+/* ---- Pièces jointes du support ---- */
+const SUP_MAX_FILES=3, SUP_MAX_BYTES=5*1024*1024;
+function supPickFiles(inp){
+  const cur=state.supFiles||[]; const err=[];
+  for(const f of inp.files){
+    if(cur.length>=SUP_MAX_FILES){ err.push('3 fichiers maximum'); break; }
+    if(!/^(image\/(jpeg|png|webp)|application\/pdf)$/.test(f.type)){ err.push(f.name+' : format non pris en charge'); continue; }
+    cur.push(f);
+  }
+  inp.value=''; state.supFiles=cur; supSyncDraft(); render(); if(err.length) showErr(err[0]);
+}
+function supRmFile(i){ state.supFiles.splice(i,1); supSyncDraft(); render(); }
+function supSyncDraft(){ const s=document.getElementById('sup-subject'), b=document.getElementById('sup-body'), r=document.getElementById('sup-reply'); if(s&&state.supDraft) state.supDraft.subject=s.value; if(b&&state.supDraft) state.supDraft.body=b.value; if(r) state.supReply=r.value; }
+function supFilesPicker(){
+  const fs=state.supFiles||[];
+  return `<div class="field"><label>Pièces jointes (facultatif)</label>
+    ${fs.map((f,i)=>`<div class="card" style="display:flex;align-items:center;gap:8px;padding:8px 10px;margin-bottom:6px;"><span style="flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📎 ${esc(f.name)}</span><span class="muted" style="font-size:12px;">${Math.max(1,Math.round(f.size/1024))} Ko</span><button type="button" class="btn btn-ghost" style="width:auto;padding:4px 10px;" onclick="supRmFile(${i})">✕</button></div>`).join('')}
+    ${fs.length<SUP_MAX_FILES?`<label class="btn btn-secondary" style="display:block;text-align:center;cursor:pointer;">+ Ajouter une photo ou un PDF<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple style="display:none;" onchange="supPickFiles(this)"></label>`:''}
+    <p class="muted" style="font-size:12px;margin-top:6px;">Images (JPG, PNG, WebP) ou PDF · 3 fichiers, 5 Mo chacun.</p></div>`;
+}
+async function supShrink(f){
+  if(f.type==='application/pdf') return f;
+  try{
+    const bmp=await createImageBitmap(f); const sc=Math.min(1,1600/Math.max(bmp.width,bmp.height));
+    if(sc===1 && f.size<=1.5*1024*1024) return f;
+    const c=document.createElement('canvas'); c.width=Math.round(bmp.width*sc); c.height=Math.round(bmp.height*sc);
+    c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);
+    const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',0.85));
+    return blob?new File([blob],f.name.replace(/\.\w+$/,'')+'.jpg',{type:'image/jpeg'}):f;
+  }catch(e){ return f; }
+}
+async function supUploadFiles(ticketId){
+  const out=[];
+  for(const f0 of (state.supFiles||[])){
+    const f=await supShrink(f0);
+    if(f.size>SUP_MAX_BYTES) throw new Error(f0.name+' dépasse 5 Mo');
+    const ext=(f.name.split('.').pop()||'bin').toLowerCase().replace(/[^a-z0-9]/g,'');
+    const path=ticketId+'/'+(crypto.randomUUID?crypto.randomUUID():Date.now()+''+Math.random().toString(16).slice(2))+'.'+ext;
+    const {error}=await sb.storage.from('support-files').upload(path,f,{contentType:f.type});
+    if(error) throw error;
+    out.push({path,name:f0.name,type:f.type,size:f.size});
+  }
+  return out;
+}
+async function supOpenFile(path){
+  const {data,error}=await sb.storage.from('support-files').createSignedUrl(path,300);
+  if(error||!data) return showErr('Fichier indisponible');
+  window.open(data.signedUrl,'_blank','noopener');
+}
+function supAttachHtml(m){
+  const a=m.attachments||[]; if(!a.length) return '';
+  return `<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;">${a.map(x=>`<button type="button" class="btn btn-secondary" style="width:auto;padding:6px 10px;font-size:12px;" onclick="supOpenFile('${esc(x.path)}')">📎 ${esc(x.name)}</button>`).join('')}</div>`;
+}
 async function loadSupport(){
   const t=await sb.from('support_tickets').select('*').order('updated_at',{ascending:false}).limit(300);
   state.supTickets=t.error?[]:t.data; if(t.error) state.error=t.error.message;
@@ -1174,7 +1228,7 @@ async function loadSupport(){
 }
 function supUnitName(id){ const u=state.units.find(x=>x.id===id); return u?u.name:'—'; }
 async function openSupTicket(id){
-  state.supOpen=id; state.supMsgs=null; state.supReply=''; render();
+  state.supOpen=id; state.supMsgs=null; state.supReply=''; state.supFiles=[]; render();
   const {data}=await sb.from('support_messages').select('*').eq('ticket_id',id).order('created_at');
   state.supMsgs=data||[]; render();
 }
@@ -1199,20 +1253,25 @@ function renderSupThread(){
   <p class="muted" style="font-size:12px;margin-bottom:12px;">${esc(supUnitName(t.unit_id))} · ${esc(t.author_name||'')} &lt;${esc(t.author_email||'')}&gt; · ${esc(SUP_CAT[t.category]||'')} · #${esc(String(t.id).slice(0,8))}</p>
   ${ms===null?'<div class="muted">Chargement…</div>':ms.map(m=>`<div class="card" style="${m.is_staff?'border-color:var(--accent);':''}">
     <p class="muted" style="font-size:12px;margin-bottom:6px;"><b>${m.is_staff?'Support (toi)':esc(t.author_name||'Membre')}</b> · ${fmtDateTime(m.created_at)}</p>
-    <div style="white-space:pre-wrap;font-size:14px;">${esc(m.body)}</div></div>`).join('')}
+    <div style="white-space:pre-wrap;font-size:14px;">${m.body==='(pièce jointe)'?'':esc(m.body)}</div>${supAttachHtml(m)}</div>`).join('')}
   <div class="field" style="margin-top:12px;"><label>Réponse (envoyée aussi par e-mail à l'auteur)</label><textarea id="sup-reply" rows="5" maxlength="5000" oninput="state.supReply=this.value" style="width:100%;">${esc(state.supReply||'')}</textarea></div>
+  ${supFilesPicker()}
   <button class="btn btn-primary" ${state.busy?'disabled':''} onclick="sendSupReply()">Envoyer la réponse</button>
   <button class="btn btn-secondary" style="margin-top:8px;" onclick="setSupStatus('${t.status==='closed'?'open':'closed'}')">${t.status==='closed'?'Rouvrir le ticket':'Clore le ticket'}</button>`;
 }
 async function sendSupReply(){
-  const body=(state.supReply||'').trim(); if(!body) return showErr('Écris une réponse');
+  supSyncDraft();
+  let body=(state.supReply||'').trim(); if(!body && !(state.supFiles||[]).length) return showErr('Écris une réponse');
+  if(!body) body='(pièce jointe)';
   state.busy=true; render();
-  const {data:m,error}=await sb.from('support_messages').insert({ticket_id:state.supOpen,body}).select().single();
+  let atts=[];
+  try{ atts=await supUploadFiles(state.supOpen); }catch(e){ state.busy=false; render(); return showErr('Pièce jointe : '+(e.message||'échec')); }
+  const {data:m,error}=await sb.from('support_messages').insert({ticket_id:state.supOpen,body,attachments:atts}).select().single();
   state.busy=false;
   if(error){ render(); return showErr(error.message); }
   try{ await sb.functions.invoke('support-events',{body:{message_id:m.id}}); }catch(e){ console.warn(e); }
   logAdmin('Réponse support', state.supOpen, {});
-  state.supReply=''; await loadSupport(); await openSupTicket(state.supOpen);
+  state.supReply=''; state.supFiles=[]; await loadSupport(); await openSupTicket(state.supOpen);
 }
 async function setSupStatus(st){
   const {error}=await sb.from('support_tickets').update({status:st}).eq('id',state.supOpen);
