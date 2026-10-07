@@ -2058,7 +2058,7 @@ function renderProfile(){
 
   ${acc('prefs', '<span>⚙️ Affichage et aide</span>', `
     <button class="btn btn-secondary" style="margin-bottom:10px;" onclick="toggleTheme()">${document.documentElement.getAttribute('data-theme')==='light'?'🌙 Passer au thème sombre':'☀️ Passer au thème clair'}</button>
-    <a href="manuel-utilisation.pdf?v=13" target="_blank" rel="noopener" class="btn btn-secondary" style="display:block;text-align:center;text-decoration:none;">📖 Manuel d'utilisation</a>`)}
+    <a href="manuel-utilisation.pdf?v=14" target="_blank" rel="noopener" class="btn btn-secondary" style="display:block;text-align:center;text-decoration:none;">📖 Manuel d'utilisation</a>`)}
 
   ${can('gererMembres') ? `<button class="btn btn-secondary" style="margin:10px 0;" onclick="openSupport()">💬 Contacter le support</button>` : ''}
 
@@ -2095,7 +2095,7 @@ function renderSupportList(){
   const t=state.supTickets;
   return `<div class="backlink" onclick="state.view='profile'; render();">‹ Retour</div>
   <h2>💬 Support</h2>
-  <p class="muted" style="margin-bottom:14px;">Une question, un problème, une idée ? Écris-nous : nous te répondons ici et par e-mail. Réservé aux administrateurs et vérificateurs de l'unité.</p>
+  <p class="muted" style="margin-bottom:14px;">Une question, un problème, une idée ? Écris-nous : nous te répondons ici et par e-mail. Réservé aux administrateurs et vérificateurs de l'unité. Les tickets clos sont supprimés automatiquement après 7 jours.</p>
   <button class="btn btn-primary" style="margin-bottom:14px;" onclick="state.supDraft={subject:'',category:'question',body:''}; state.supFiles=[]; state.view='supportNew'; render();">+ Nouveau ticket</button>
   ${t===null?'<div class="muted" style="text-align:center;padding:20px;"><span class="spinner"></span></div>':
     t.length===0?'<div class="card muted" style="text-align:center;">Aucun ticket pour le moment.</div>':
@@ -2168,6 +2168,7 @@ function supAttachHtml(m){
   const a=m.attachments||[]; if(!a.length) return '';
   return `<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;">${a.map(x=>`<button type="button" class="btn btn-secondary" style="width:auto;padding:6px 10px;font-size:12px;" onclick="supOpenFile('${esc(x.path)}')">📎 ${esc(x.name)}</button>`).join('')}</div>`;
 }
+function supPurgeNote(t){ if(t.status!=='closed'||!t.closed_at) return ''; const d=new Date(new Date(t.closed_at).getTime()+7*86400000); return `<p class="muted" style="font-size:12px;margin:8px 0;">🗑 Ticket clos : il sera supprimé automatiquement, avec ses pièces jointes, le ${d.toLocaleDateString('fr-FR')}.</p>`; }
 async function supNotify(messageId){
   try{ await sb.functions.invoke('support-events',{body:{message_id:messageId}}); }catch(e){ console.warn('support-events',e); }
 }
@@ -2204,7 +2205,7 @@ function renderSupportThread(){
     <div class="card" style="${m.is_staff?'border-color:var(--accent);':''}">
       <div class="muted" style="font-size:12px;margin-bottom:6px;"><b>${m.is_staff?'Support Optepia':(m.user_id===state.session.user.id?'Moi':esc(t.author_name||'Membre'))}</b> · ${fmtDateTime(m.created_at)}</div>
       <div style="white-space:pre-wrap;font-size:14px;">${m.body==='(pièce jointe)'?'':esc(m.body)}</div>${supAttachHtml(m)}</div>`).join('')}
-  ${t.status==='closed'?`<button class="btn btn-secondary" onclick="supSetStatus('open')">Rouvrir le ticket</button>`:`
+  ${t.status==='closed'?`${supPurgeNote(t)}<button class="btn btn-secondary" onclick="supSetStatus('open')">Rouvrir le ticket</button>`:`
     <div class="field" style="margin-top:12px;"><label>Ta réponse</label><textarea id="sup-reply" rows="4" maxlength="5000" oninput="state.supReply=this.value">${esc(state.supReply||'')}</textarea></div>
     ${supFilesPicker()}
     <button class="btn btn-primary" ${state.busy?'disabled':''} onclick="sendSupportReply()">${state.busy?'<span class="spinner"></span>':'Envoyer'}</button>
