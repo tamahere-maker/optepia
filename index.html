@@ -137,6 +137,14 @@
   .badge-ok{background:var(--ok-bg);color:var(--ok);}
   .badge-warn{background:var(--warn-bg);color:var(--warn);}
   .badge-danger{background:var(--danger-bg);color:var(--danger);}
+  .org-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:14px 0;}
+  .org-kpis .card{margin:0;padding:12px 14px;}
+  .org-kpis b{display:block;font-size:24px;line-height:1.1;font-variant-numeric:tabular-nums;}
+  .org-kpis span{font-size:12px;color:var(--text-muted);}
+  .org-bar{display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--border);margin:10px 0 8px;}
+  .org-bar i{display:block;height:100%;}
+  .org-nums{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12.5px;}
+  .org-nums span{white-space:nowrap;}
   .mono{overflow-wrap:anywhere;font-family:var(--font-mono);font-size:13px;letter-spacing:0.3px;}
   .muted{color:var(--text-muted);font-size:13px;}
   .thumb{width:56px;height:56px;border-radius:8px;object-fit:contain;background:var(--surface2);border:1px solid var(--border);flex-shrink:0;}
@@ -265,7 +273,8 @@ let state = {
   mfaFactorId:null, mfaChallengeId:null, mfaFactors:[], mfaEnroll:null,
   loanTab:'pret', checkoutSelection:[], checkoutType:'pret', batchReturn:{}, controlDetailId:null,
   setupMode:'create', qrStatus:null, toast:null, loadError:null,
-  famFilter:'', availFilter:'', jf:{user:'',cat:'',period:'',q:''}, journalLimit:300, journalHasMore:false, bc:null, sheet:null
+  famFilter:'', availFilter:'', jf:{user:'',cat:'',period:'',q:''}, journalLimit:300, journalHasMore:false, bc:null, sheet:null,
+  orgs:[], orgId:null, orgRows:null, orgErr:null, orgSort:'priorite', orgUnitId:null, orgAttn:null, unitOrgs:null
 };
 const ROLES = {
   administrateur:{label:'Administrateur', can:['creerMateriel','supprimerMateriel','editerMateriel','ajouterControle','gererMembres','exporter','gererPret','validerPret','validerModificationMateriel']},
@@ -391,7 +400,12 @@ async function loadUnitContext(){
     const { data: memberships, error } = await sb.from('unit_members').select('*, units(*)').eq('user_id', state.session.user.id);
     if(error) throw error;
     state.memberships = memberships || [];
-    if(state.memberships.length===0){ state.view='unitSetup'; render(); return; }
+    await loadMyOrgs();
+    if(state.memberships.length===0){
+      if(state.orgs.length===1){ openOrg(state.orgs[0].org_id); return; }
+      if(state.orgs.length>1){ state.view='orgPicker'; render(); return; }
+      state.view='unitSetup'; render(); return;
+    }
     let target = null;
     if(state.pendingActivateUnitId){ target = state.memberships.find(m=>m.unit_id===state.pendingActivateUnitId); state.pendingActivateUnitId=null; }
     if(!target && state.activeMembershipId) target = state.memberships.find(m=>m.id===state.activeMembershipId);
@@ -403,6 +417,7 @@ async function loadUnitContext(){
 }
 async function selectMembership(m){
   state.unit = m.units; state.role = m.role; state.myMemberId = m.id; state.myDisplayName = m.display_name; state.activeMembershipId = m.id; state.myAvatarUrl = m.avatar_url || null;
+  state.unitOrgs = null; loadUnitOrgs();
   await Promise.all([loadAccess(), refreshAll()]);
   state.view='home';
   render();
@@ -513,7 +528,7 @@ async function submitMfaChallenge(){
 }
 async function doLogout(){
   await sb.auth.signOut();
-  state = Object.assign(state, {unit:null, role:null, equipment:[], members:[], journal:[], memberships:[], activeMembershipId:null, mfaFactorId:null, isPlatformAdmin:undefined, notifPrefs:undefined, notifPrefsErr:false, mfaChallengeId:null, view:'auth', authMode:'login'});
+  state = Object.assign(state, {unit:null, role:null, equipment:[], members:[], journal:[], memberships:[], orgs:[], orgId:null, orgRows:null, orgAttn:null, orgUnitId:null, unitOrgs:null, activeMembershipId:null, mfaFactorId:null, isPlatformAdmin:undefined, notifPrefs:undefined, notifPrefsErr:false, mfaChallengeId:null, view:'auth', authMode:'login'});
   render();
 }
 function setAuthMode(m){ state.authMode=m; render(); }
@@ -1199,8 +1214,8 @@ function newControlDraft(){ controlDraft = {date:new Date().toISOString().slice(
 
 /* ---------- Render ---------- */
 /* ===== Bouton « retour » du téléphone : revient à l'écran précédent au lieu de fermer l'appli ===== */
-const NAV_FIELDS=['view','detailId','controlDetailId','batchDetailKey','batchDetailType','sheet','filter','groupFilter','famFilter','availFilter'];
-const NAV_FREE=['loading','error','auth','resetPassword','mfaChallenge','unitSetup','unitPicker'];
+const NAV_FIELDS=['view','detailId','controlDetailId','batchDetailKey','batchDetailType','sheet','filter','groupFilter','famFilter','availFilter','orgId','orgUnitId'];
+const NAV_FREE=['loading','error','auth','resetPassword','mfaChallenge','unitSetup','unitPicker','orgPicker'];
 const NAV_FORMS=['addEquip','addControl','loanOut','loanReturn','checkout','batchReturn','batchControl','importPreview','refuseLoan','transferOwnership'];
 let _navCur=null, _navCurView=null, _navBusy=false, _ovSkip=0; const _ovStack=[];
 function navSnap(){ const o={unit:(state.unit&&state.unit.id)||null}; NAV_FIELDS.forEach(k=>{ o[k]=state[k]===undefined?null:state[k]; }); return o; }
@@ -1260,6 +1275,10 @@ function render(){
     html = renderUnitSetup();
   } else if(state.view==='unitPicker'){
     html = renderUnitPicker();
+  } else if(state.view==='orgPicker'){
+    html = renderOrgPicker();
+  } else if(state.view==='orgHome' || state.view==='orgUnit'){
+    html = renderOrgTopbar() + '<main class="wide">' + (state.view==='orgHome' ? renderOrgHome() : renderOrgUnit()) + '</main>';
   } else {
     html = renderTopbar() + '<main class="'+(state.view==='list'?'wide'+(state.selMode?' selpad':''):'')+'">' + renderView() + '</main>' + renderNav();
   }
@@ -1430,6 +1449,7 @@ function renderUnitPicker(){
           </div>
         </div>`).join('')}
     </div>
+    ${(state.orgs||[]).length?`<h3 style="margin:22px 0 8px;font-size:14px;">Tes groupements</h3><div class="role-pick">${orgPickItems()}</div>`:''}
     <button class="btn btn-ghost" style="margin-top:14px;" onclick="startJoinOrCreateAnother()">+ Rejoindre ou créer une autre unité</button>
     ${state.unit?`<button class="btn btn-ghost" onclick="selectMembershipById('${state.activeMembershipId}')">‹ Annuler</button>`:''}
     <button class="btn btn-ghost" onclick="doLogout()">Se déconnecter</button>
@@ -2039,6 +2059,9 @@ function renderProfile(){
 
   ${unitBody ? acc('unit', "<span>🏢 Paramètres de l'unité</span>", unitBody) : ''}
 
+  ${(state.role==='administrateur' || (state.unitOrgs && state.unitOrgs.length)) ? acc('orgs', '<span>🏛️ Groupements</span>', renderOrgsSection()) : ''}
+  ${(state.orgs||[]).length ? `<button class="btn btn-secondary" style="margin:10px 0;" onclick="${state.orgs.length===1?`openOrg('${state.orgs[0].org_id}')`:`state.view='orgPicker'; render();`}">📊 Vue groupement (superviseur)</button>` : ''}
+
   ${acc('pw', '<span>🔒 Changer mon mot de passe</span>', `
     <div class="field"><label>Mot de passe actuel</label>
       <div style="display:flex;gap:8px;"><input id="pw-current" type="password" autocomplete="current-password" style="flex:1;"><button type="button" class="btn btn-ghost" style="width:auto;" onclick="togglePwVisibility('pw-current',this)">👁</button></div>
@@ -2080,6 +2103,234 @@ function renderProfile(){
   <button class="btn btn-secondary" style="margin-top:10px;margin-bottom:20px;" onclick="doLogout()">Se déconnecter</button>
   <div class="brand-sign"><img src="logo-mark.png" alt="">OPTEPIA · Gérez · Contrôlez · Tracez<div style="margin-top:8px;text-transform:none;letter-spacing:0;font-size:12px;"><a href="mentions-legales.html" target="_blank" rel="noopener">Mentions légales</a> · <a href="cgu.html" target="_blank" rel="noopener">CGU</a> · <a href="confidentialite.html" target="_blank" rel="noopener">Confidentialité</a></div></div>
   `;
+}
+
+/* ---------- Groupements : vue superviseur (lecture seule) et rattachement des unités ---------- */
+const ORG_ST={
+  depasse:['Contrôle dépassé','badge-danger'], jamais:['Jamais contrôlé','badge-warn'], proche:['Contrôle sous 30 j','badge-warn'],
+  fin_vie:['Fin de vie sous 60 j','badge-warn'], hors_service:['Hors service','badge-danger'], reforme:['Réformé','badge-danger']
+};
+async function loadMyOrgs(){
+  try{ const {data}=await sb.rpc('org_my'); state.orgs=Array.isArray(data)?data:[]; }catch(e){ state.orgs=[]; }
+}
+function curOrg(){ return (state.orgs||[]).find(o=>o.org_id===state.orgId)||null; }
+function openOrg(id){
+  state.orgId=id; state.orgRows=null; state.orgErr=null; state.orgUnitId=null; state.orgAttn=null; state.view='orgHome';
+  render(); window.scrollTo(0,0); loadOrgRows();
+}
+async function loadOrgRows(){
+  const id=state.orgId;
+  const {data,error}=await sb.rpc('org_overview',{p_org:id});
+  if(id!==state.orgId) return;
+  if(error){ state.orgRows=[]; state.orgErr=error.message; } else { state.orgRows=data||[]; state.orgErr=null; }
+  if(state.view==='orgHome') render();
+}
+function refreshOrg(){ state.orgRows=null; render(); loadOrgRows(); }
+function openOrgUnit(uid){ state.orgUnitId=uid; state.orgAttn=null; state.view='orgUnit'; render(); window.scrollTo(0,0); loadOrgAttn(uid); }
+async function loadOrgAttn(uid){
+  const {data,error}=await sb.rpc('org_attention',{p_org:state.orgId,p_unit:uid});
+  if(uid!==state.orgUnitId) return;
+  state.orgAttn=error?[]:(data||[]);
+  if(state.view==='orgUnit') render();
+}
+async function orgToUnits(){ state.unit=null; await loadUnitContext(); }
+function orgPickItems(){
+  return (state.orgs||[]).map(o=>`
+    <div class="role-opt" style="cursor:pointer;" onclick="openOrg('${o.org_id}')">
+      <div class="row" style="width:100%;">
+        <div><div style="font-weight:600;font-size:14px;">${esc(o.name)}</div><div class="muted" style="font-size:12px;">Superviseur · ${o.unit_count} unité${o.unit_count>1?'s':''}</div></div>
+        <span class="muted">›</span>
+      </div>
+    </div>`).join('');
+}
+function renderOrgPicker(){
+  return `
+  <div style="padding:56px 24px 24px;max-width:420px;margin:0 auto;">
+    ${brandMark(56)}
+    <h1 style="font-size:24px;">Tes groupements</h1>
+    <p class="muted" style="margin-bottom:20px;">Choisis celui à afficher.</p>
+    <div class="role-pick">${orgPickItems()}</div>
+    ${state.memberships.length?`<button class="btn btn-ghost" style="margin-top:14px;" onclick="openUnitSwitcher()">Mes unités</button>`:''}
+    <button class="btn btn-ghost" onclick="doLogout()">Se déconnecter</button>
+  </div>`;
+}
+function renderOrgTopbar(){
+  const o=curOrg();
+  return `
+  <div class="topbar">
+    <div class="hd-avatars" style="margin:0 12px 0 0;"><div class="hd-team hd-fallback"><img src="logo-mark.png" alt=""></div></div>
+    <div style="min-width:0;flex:1;">
+      <h2 style="margin:0;line-height:24px;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(o?o.name:'Groupement')}</h2>
+      <small style="color:var(--text-muted);font-size:11px;display:block;">Vue superviseur · lecture seule</small>
+    </div>
+    <a href="https://optepia.fr" target="_blank" rel="noopener" title="Site optepia.fr" style="display:flex;flex-shrink:0;"><img class="hd-logo" src="logo-mark.png" alt="Optepia"></a>
+  </div>`;
+}
+function orgScore(r){ return r.depasse*3 + r.jamais*2 + r.hors_service + r.a_surveiller*0.5 + r.loans_late; }
+function orgPct(r){ return r.total? Math.round(r.conforme/r.total*100) : null; }
+function orgBar(r){
+  if(!r.total) return '<div class="org-bar"></div>';
+  const w=n=>(n/r.total*100).toFixed(2)+'%';
+  const bad=r.depasse+r.jamais+r.hors_service;
+  return `<div class="org-bar" role="img" aria-label="${r.conforme} conformes, ${r.a_surveiller} à surveiller, ${bad} à traiter">
+    <i style="width:${w(r.conforme)};background:var(--ok);"></i><i style="width:${w(r.a_surveiller)};background:var(--warn);"></i><i style="width:${w(bad)};background:var(--danger);"></i></div>`;
+}
+function renderOrgHome(){
+  const o=curOrg(), rows=state.orgRows;
+  const head=`<div class="row" style="align-items:flex-start;"><h2 style="margin:0;">Synthèse du groupement</h2>
+    <button class="btn btn-ghost" style="width:auto;padding:6px 10px;" onclick="refreshOrg()">↻ Actualiser</button></div>`;
+  const foot=`<div style="margin-top:18px;display:flex;flex-direction:column;gap:8px;">
+    ${(state.orgs||[]).length>1?`<button class="btn btn-secondary" onclick="state.view='orgPicker'; render();">Changer de groupement</button>`:''}
+    ${state.memberships.length?`<button class="btn btn-secondary" onclick="orgToUnits()">Mes unités</button>`:''}
+    <button class="btn btn-secondary" onclick="doLogout()">Se déconnecter</button></div>`;
+  if(rows===null) return head+`<div class="muted" style="text-align:center;padding:30px;"><span class="spinner"></span></div>`;
+  if(state.orgErr) return head+`<div class="card" style="border-color:var(--danger);">${esc(state.orgErr)}</div>`+foot;
+  const codeCard=`<div class="card" style="margin-top:14px;"><h3 style="margin-bottom:8px;">Code de rattachement</h3>
+    <div class="code-display">${esc(o?o.code:'—')}</div>
+    <p class="muted">Communique ce code à l'administrateur de chaque unité : il le saisit dans son Profil, rubrique « Groupements ». Chaque unité reste libre de se retirer à tout moment.</p></div>`;
+  if(!rows.length) return head+`<div class="card muted" style="text-align:center;margin-top:14px;">Aucune unité rattachée pour le moment.</div>`+codeCard+foot;
+  const T=k=>rows.reduce((t,r)=>t+(+r[k]||0),0);
+  const total=T('total'), conf=T('conforme');
+  const pct=total?Math.round(conf/total*100):0;
+  const sorted=rows.slice().sort(state.orgSort==='nom'
+    ? (a,b)=>a.name.localeCompare(b.name,'fr')
+    : (a,b)=>(a.total?0:1)-(b.total?0:1) || orgScore(b)-orgScore(a) || a.name.localeCompare(b.name,'fr'));
+  const kpi=(v,l,c)=>`<div class="card"><b ${c?`style="color:${c};"`:''}>${v}</b><span>${l}</span></div>`;
+  return head+`
+  <div class="org-kpis">
+    ${kpi(rows.length,'unité'+(rows.length>1?'s':''))}
+    ${kpi(total,'équipements')}
+    ${kpi(pct+' %','conformes',pct>=90?'var(--ok)':pct>=70?'var(--warn)':'var(--danger)')}
+    ${kpi(T('depasse'),'contrôles dépassés',T('depasse')?'var(--danger)':'')}
+    ${kpi(T('jamais'),'jamais contrôlés',T('jamais')?'var(--warn)':'')}
+    ${kpi(T('loans_late'),'prêts en retard',T('loans_late')?'var(--warn)':'')}
+  </div>
+  <div class="row" style="margin-bottom:10px;">
+    <div style="display:flex;gap:6px;">
+      <button class="chip ${state.orgSort==='priorite'?'active':''}" onclick="state.orgSort='priorite'; render();">Par priorité</button>
+      <button class="chip ${state.orgSort==='nom'?'active':''}" onclick="state.orgSort='nom'; render();">Par nom</button>
+    </div>
+  </div>
+  ${sorted.map(r=>{
+    const p=orgPct(r), bc=p===null?'':p>=90?'badge-ok':p>=70?'badge-warn':'badge-danger';
+    return `<div class="card" style="cursor:pointer;" onclick="openOrgUnit('${r.unit_id}')">
+      <div class="row"><b style="font-size:15px;min-width:0;overflow:hidden;text-overflow:ellipsis;">${esc(r.name)}</b>${p===null?'<span class="badge">Aucun matériel</span>':`<span class="badge ${bc}">${p} % conformes</span>`}</div>
+      ${orgBar(r)}
+      <div class="org-nums">
+        <span>${r.total} équipement${r.total>1?'s':''}</span>
+        ${r.depasse?`<span style="color:var(--danger);">${r.depasse} dépassé${r.depasse>1?'s':''}</span>`:''}
+        ${r.jamais?`<span style="color:var(--warn);">${r.jamais} jamais contrôlé${r.jamais>1?'s':''}</span>`:''}
+        ${r.a_surveiller?`<span style="color:var(--warn);">${r.a_surveiller} à surveiller</span>`:''}
+        ${r.hors_service?`<span style="color:var(--danger);">${r.hors_service} hors service</span>`:''}
+        ${r.avec_reserve?`<span>${r.avec_reserve} avec réserve</span>`:''}
+      </div>
+      <div class="muted" style="margin-top:6px;font-size:12px;">Dernier contrôle : ${fmtDate(r.last_control)} · Dernière activité : ${fmtDate(r.last_activity)}${r.loans_out?` · ${r.loans_out} sortie${r.loans_out>1?'s':''} en cours${r.loans_late?` (${r.loans_late} en retard)`:''}`:''}</div>
+    </div>`;}).join('')}
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
+    <button class="btn btn-secondary" style="width:auto;" onclick="exportOrgSummary()">⬇ Synthèse (CSV)</button>
+    <button class="btn btn-secondary" style="width:auto;" onclick="exportOrgAttention(null)">⬇ Fiches à traiter, toutes unités (CSV)</button>
+  </div>
+  <p class="muted" style="margin-top:10px;font-size:12px;">Lecture seule. Cette vue ne montre ni noms de personnes, ni photos, ni signatures, ni journal. Chaque consultation est visible par les unités rattachées.</p>
+  ${codeCard}${foot}`;
+}
+function renderOrgUnit(){
+  const r=(state.orgRows||[]).find(x=>x.unit_id===state.orgUnitId), a=state.orgAttn;
+  const back=`<div class="backlink" onclick="state.view='orgHome'; render(); window.scrollTo(0,0);">‹ Retour au groupement</div>`;
+  if(!r) return back+`<div class="empty">Unité introuvable.</div>`;
+  const p=orgPct(r);
+  let body='';
+  if(a===null) body=`<div class="muted" style="text-align:center;padding:30px;"><span class="spinner"></span></div>`;
+  else if(!a.length) body=`<div class="card muted" style="text-align:center;">Rien à signaler : tout le matériel est conforme.</div>`;
+  else {
+    const order=['depasse','jamais','hors_service','reforme','proche','fin_vie'];
+    body=order.map(k=>{
+      const list=a.filter(x=>x.status===k); if(!list.length) return '';
+      const st=ORG_ST[k];
+      return `<h3 style="margin:16px 0 8px;font-size:14px;">${st[0]} <span class="muted">(${list.length})</span></h3>`+list.map(x=>`
+        <div class="card" style="padding:12px 14px;margin-bottom:8px;">
+          <div class="row" style="align-items:flex-start;">
+            <div style="min-width:0;"><b>${esc(x.designation||'—')}</b>${x.marque?` <span class="muted">${esc(x.marque)}</span>`:''}
+              <div class="muted" style="font-size:12px;">${[x.identification,x.famille,x.taille].filter(Boolean).map(esc).join(' · ')||'—'}</div></div>
+            <span class="badge ${st[1]}" style="flex-shrink:0;">${st[0]}</span>
+          </div>
+          <div class="muted" style="font-size:12px;margin-top:6px;">${(k==='depasse'||k==='jamais'||k==='proche')
+            ? `Dernier contrôle : ${fmtDate(x.last_control)} · Échéance : ${fmtDate(x.next_control)}`
+            : `Fin de vie : ${fmtDate(x.date_fin_vie)}${x.last_control?` · Dernier contrôle : ${fmtDate(x.last_control)}`:''}`}</div>
+        </div>`).join('');
+    }).join('');
+  }
+  return back+`
+  <div class="row" style="align-items:flex-start;"><h2 style="margin:0;">${esc(r.name)}</h2>${p===null?'':`<span class="badge ${p>=90?'badge-ok':p>=70?'badge-warn':'badge-danger'}">${p} % conformes</span>`}</div>
+  ${orgBar(r)}
+  <div class="org-nums" style="margin-bottom:6px;">
+    <span>${r.total} équipement${r.total>1?'s':''}</span><span>${r.conforme} conforme${r.conforme>1?'s':''}</span>
+    <span>${r.members} membre${r.members>1?'s':''}</span>
+    ${r.loans_out?`<span>${r.loans_out} sortie${r.loans_out>1?'s':''} en cours${r.loans_late?` (${r.loans_late} en retard)`:''}</span>`:''}
+  </div>
+  <p class="muted" style="font-size:12px;">Fiches à traiter uniquement. Les équipements conformes ne sont pas listés.</p>
+  ${body}
+  ${a&&a.length?`<button class="btn btn-secondary" style="margin-top:10px;" onclick="exportOrgAttention('${r.unit_id}')">⬇ Exporter cette liste (CSV)</button>`:''}`;
+}
+function orgCsv(rows,name){
+  const q=v=>{ let s=String(v==null?'':v); if(/^[=+\-@]/.test(s)) s="'"+s; return '"'+s.replace(/"/g,'""')+'"'; };
+  const csv=rows.map(r=>r.map(q).join(';')).join(String.fromCharCode(10));
+  const blob=new Blob([String.fromCharCode(0xFEFF)+csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob), a=document.createElement('a');
+  a.href=url; a.download=name; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+function exportOrgSummary(){
+  const o=curOrg(), rows=state.orgRows||[];
+  const head=['Unité','Équipements','Conformes','À surveiller','Contrôles dépassés','Jamais contrôlés','Hors service ou réformés','Avec réserve','Sorties en cours','Sorties en retard','Dernier contrôle','Dernière activité'];
+  orgCsv([head].concat(rows.map(r=>[r.name,r.total,r.conforme,r.a_surveiller,r.depasse,r.jamais,r.hors_service,r.avec_reserve,r.loans_out,r.loans_late,fmtDate(r.last_control),fmtDate(r.last_activity)])),
+    'synthese-'+(o?o.name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''):'groupement')+'.csv');
+}
+async function exportOrgAttention(uid){
+  const {data,error}=await sb.rpc('org_attention',{p_org:state.orgId,p_unit:uid||null});
+  if(error){ showToast(error.message); return; }
+  const head=['Unité','Désignation','Marque','Identification','Famille','Taille','Statut','Dernier contrôle','Prochain contrôle','Fin de vie'];
+  orgCsv([head].concat((data||[]).map(x=>[x.unit_name,x.designation,x.marque,x.identification,x.famille,x.taille,(ORG_ST[x.status]||[x.status])[0],fmtDate(x.last_control),fmtDate(x.next_control),fmtDate(x.date_fin_vie)])),
+    uid?'fiches-a-traiter-unite.csv':'fiches-a-traiter-groupement.csv');
+}
+
+/* Côté unité : rattachement à un groupement (administrateur de l'unité) */
+async function loadUnitOrgs(){
+  if(!state.unit) return;
+  const uid=state.unit.id;
+  try{ const {data}=await sb.rpc('unit_orgs',{p_unit:uid}); if(state.unit && state.unit.id===uid) state.unitOrgs=Array.isArray(data)?data:[]; }
+  catch(e){ if(state.unit && state.unit.id===uid) state.unitOrgs=[]; }
+  if(state.view==='profile') render();
+}
+function renderOrgsSection(){
+  const list=state.unitOrgs, admin=state.role==='administrateur';
+  let h='';
+  if(list===null) h+='<div class="muted" style="text-align:center;padding:10px;"><span class="spinner"></span></div>';
+  else if(!list.length) h+='<div class="card muted">Cette unité n\'est rattachée à aucun groupement.</div>';
+  else h+=list.map(o=>`<div class="card">
+      <b>${esc(o.name)}</b>
+      <div class="muted" style="font-size:12px;margin-top:2px;">Rattachée le ${fmtDate(o.linked_at)}${o.linked_by_name?' par '+esc(o.linked_by_name):''} · Dernière consultation du groupement : ${o.last_viewed?fmtDate(o.last_viewed):'aucune'}</div>
+      ${admin?`<button class="btn btn-ghost" style="width:auto;margin-top:8px;color:var(--danger);" onclick="unlinkOrg('${o.org_id}')">Retirer l'unité de ce groupement</button>`:''}
+    </div>`).join('');
+  if(admin) h+=`
+    <div class="field" style="margin-top:6px;"><label>Code du groupement</label><input id="org-code" class="mono" style="text-transform:uppercase;" placeholder="EX : A1B2C3D4" autocomplete="off"></div>
+    <button class="btn btn-secondary" onclick="linkOrg()">Rattacher l'unité</button>`;
+  h+=`<p class="muted" style="margin-top:10px;font-size:12px;">Un groupement rattaché voit en lecture seule le nombre d'équipements par statut, les contrôles à faire et la liste des fiches à traiter. Il ne voit ni les noms des personnes, ni les photos, ni les signatures, ni le journal. Chaque consultation est indiquée ci-dessus.${admin?' Tu peux retirer l\'unité à tout moment.':' Seul un administrateur de l\'unité peut rattacher ou retirer l\'unité.'}</p>`;
+  return h;
+}
+async function linkOrg(){
+  const el=document.getElementById('org-code'), code=(el&&el.value||'').trim();
+  if(!code){ showToast('Saisis le code du groupement'); return; }
+  const {data,error}=await sb.rpc('unit_link_org',{p_unit:state.unit.id,p_code:code});
+  if(error){ showToast(error.message); return; }
+  await loadUnitOrgs();
+  showToast('Unité rattachée à '+((data&&data.name)||'ce groupement'));
+}
+async function unlinkOrg(orgId){
+  const o=(state.unitOrgs||[]).find(x=>x.org_id===orgId); if(!o) return;
+  if(!confirm(`Retirer l'unité du groupement « ${o.name} » ? Il ne pourra plus voir ses données.`)) return;
+  const {error}=await sb.rpc('unit_unlink_org',{p_unit:state.unit.id,p_org:orgId});
+  if(error){ showToast(error.message); return; }
+  await loadUnitOrgs();
+  showToast('Unité retirée du groupement');
 }
 
 /* ---------- Support (tickets) : administrateurs et vérificateurs ---------- */
@@ -2421,7 +2672,7 @@ function catOfAction(a){
   if(/mission/i.test(a)) return 'Missions';
   if(/^Pr[êe]t|restitu/i.test(a)) return 'Prêts';
   if(/Contrôle/i.test(a)) return 'Contrôles';
-  if(/Rôle|Membre|Propriét|Unité/i.test(a)) return 'Équipe et unité';
+  if(/Rôle|Membre|Propriét|Unité|groupement/i.test(a)) return 'Équipe et unité';
   return 'Matériel';
 }
 const JOURNAL_CATS = ['Matériel','Contrôles','Prêts','Missions','Équipe et unité'];

@@ -651,12 +651,12 @@ function renderTopbar(){
 function askGoApp(){
   openModal({ title:'Aller sur l\'application ?', body:'<p>Tu vas quitter l\'espace administration pour ouvrir l\'application Optepia.</p>', confirmLabel:'Ouvrir l\'application', onConfirm:()=>{ location.href='index.html'; } });
 }
-function setView(v){ state.view=v; if(v==='log' && !state.adminLog) loadLog(); if(v==='support') loadSupport(); render(); window.scrollTo(0,0); }
+function setView(v){ state.view=v; if(v==='log' && !state.adminLog) loadLog(); if(v==='support') loadSupport(); if(v==='orgs') loadOrgsAdmin(); render(); window.scrollTo(0,0); }
 function supCountLabel(){ const n=(state.supTickets||[]).filter(t=>t.status==='open').length; return n?' ('+n+')':''; }
 function renderNav(){
   const cur = state.view==='unitDetail' ? 'units' : state.view;
   const t = (k,l)=>`<button class="tab ${cur===k?'active':''}" onclick="setView('${k}')">${l}</button>`;
-  return `<div class="navwrap"><div class="tabs">${t('units','Unités')}${t('backups','Sauvegardes')}${t('catalog','Catalogue')}${t('support','Support'+supCountLabel())}${t('log','Journal admin')}</div></div>`;
+  return `<div class="navwrap"><div class="tabs">${t('units','Unités')}${t('backups','Sauvegardes')}${t('catalog','Catalogue')}${t('support','Support'+supCountLabel())}${t('orgs','Groupements')}${t('log','Journal admin')}</div></div>`;
 }
 function renderView(){
   if(state.view==='unitDetail') return renderUnitDetail();
@@ -664,6 +664,7 @@ function renderView(){
   if(state.view==='catalog') return renderCatalogView();
   if(state.view==='log') return renderLogView();
   if(state.view==='support') return renderSupportView();
+  if(state.view==='orgs') return renderOrgsAdminView();
   return renderUnitsList();
 }
 function renderSelBar(){
@@ -1226,6 +1227,85 @@ async function loadSupport(){
   const t=await sb.from('support_tickets').select('*').order('updated_at',{ascending:false}).limit(300);
   state.supTickets=t.error?[]:t.data; if(t.error) state.error=t.error.message;
   if(state.view==='support') render();
+}
+/* ---------------- Groupements : vue superviseur ---------------- */
+async function loadOrgsAdmin(){
+  const {data,error}=await sb.rpc('admin_org_list');
+  if(error) showErr(error.message);
+  state.orgsAdm=error?[]:(data||[]);
+  if(state.view==='orgs') render();
+}
+async function createOrgAdm(){
+  const el=document.getElementById('org-new'), name=(el&&el.value||'').trim();
+  if(name.length<2){ showErr('Donne un nom au groupement'); return; }
+  const {error}=await sb.rpc('admin_org_create',{p_name:name});
+  if(error){ showErr(error.message); return; }
+  await loadOrgsAdmin();
+}
+async function addOrgMember(id){
+  const em=document.getElementById('org-em-'+id), nm=document.getElementById('org-nm-'+id);
+  const email=(em&&em.value||'').trim(), name=(nm&&nm.value||'').trim();
+  if(!email){ showErr('Saisis l\'e-mail du superviseur'); return; }
+  const {error}=await sb.rpc('admin_org_add_member',{p_org:id,p_email:email,p_name:name});
+  if(error){ showErr(error.message); return; }
+  await loadOrgsAdmin();
+}
+function askRemoveOrgMember(id,userId){
+  const o=(state.orgsAdm||[]).find(x=>x.id===id), m=o&&o.members.find(x=>x.user_id===userId); if(!m) return;
+  openModal({ title:'Retirer ce superviseur ?', confirmLabel:'Retirer',
+    body:`<p>Retirer <b>${esc(m.display_name)}</b> du groupement <b>${esc(o.name)}</b> ? Son compte reste actif.</p>`,
+    onConfirm:async ()=>{
+      const {error}=await sb.rpc('admin_org_remove_member',{p_org:id,p_user:userId});
+      if(error){ showErr(error.message); return; }
+      await loadOrgsAdmin();
+    } });
+}
+function askRegenOrgCode(id){
+  const o=(state.orgsAdm||[]).find(x=>x.id===id); if(!o) return;
+  openModal({ title:'Changer le code ?', confirmLabel:'Changer le code',
+    body:`<p>Un nouveau code sera généré pour <b>${esc(o.name)}</b>. Les unités déjà rattachées le restent, mais l'ancien code ne fonctionnera plus pour de nouveaux rattachements.</p>`,
+    onConfirm:async ()=>{
+      const {error}=await sb.rpc('admin_org_regen_code',{p_org:id});
+      if(error){ showErr(error.message); return; }
+      await loadOrgsAdmin();
+    } });
+}
+function askDeleteOrg(id){
+  const o=(state.orgsAdm||[]).find(x=>x.id===id); if(!o) return;
+  openModal({ title:'Supprimer ce groupement ?', danger:true, typed:'SUPPRIMER', confirmLabel:'Supprimer',
+    body:`<p>Supprimer <b>${esc(o.name)}</b> ? Les ${o.units.length} unité${o.units.length>1?'s':''} rattachée${o.units.length>1?'s':''} ne sont pas touchées, mais les superviseurs perdent l'accès.</p><p style="font-size:13px;margin-top:10px;">Pour confirmer, tape <b>SUPPRIMER</b> :</p>`,
+    onConfirm:async ()=>{
+      const {error}=await sb.rpc('admin_org_delete',{p_org:id});
+      if(error){ showErr(error.message); return; }
+      await loadOrgsAdmin();
+    } });
+}
+function renderOrgsAdminView(){
+  const list=state.orgsAdm;
+  const head=`<h1 style="margin-bottom:4px;">Groupements</h1>
+    <p class="muted" style="font-size:12px;margin-bottom:12px;">Un groupement réunit plusieurs unités. Ses superviseurs voient une synthèse en lecture seule. Chaque unité se rattache elle-même avec le code (Profil › Groupements) et peut se retirer à tout moment.</p>
+    <div class="card"><div class="field"><label for="org-new">Nouveau groupement</label><input id="org-new" placeholder="Ex. Groupement de gendarmerie de l'Eure" maxlength="120"></div>
+    <button class="btn btn-primary" onclick="createOrgAdm()">Créer le groupement</button></div>`;
+  if(!list) return head+`<div class="muted">Chargement…</div>`;
+  if(!list.length) return head+`<div class="empty">Aucun groupement.</div>`;
+  return head+list.map(o=>`<div class="card">
+    <div class="row"><b style="font-size:15px;">${esc(o.name)}</b>
+      <button class="btn b2 sm" style="width:auto;color:var(--danger);" onclick="askDeleteOrg('${o.id}')">Supprimer</button></div>
+    <div class="row" style="margin:10px 0;justify-content:flex-start;gap:10px;flex-wrap:wrap;">
+      <span class="muted" style="font-size:12px;">Code de rattachement</span>
+      <code style="font-size:15px;font-weight:700;letter-spacing:1px;">${esc(o.code)}</code>
+      <button class="btn b2 sm" style="width:auto;" onclick="askRegenOrgCode('${o.id}')">Changer</button></div>
+    <p class="muted" style="font-size:12px;margin:10px 0 4px;"><b>Superviseurs (${o.members.length})</b></p>
+    ${o.members.length?o.members.map(m=>`<div class="row" style="padding:4px 0;"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;">${esc(m.display_name)} <span class="muted" style="font-size:12px;">${esc(m.email||'')}</span></span>
+      <button class="btn b2 sm" style="width:auto;" onclick="askRemoveOrgMember('${o.id}','${m.user_id}')">✕</button></div>`).join(''):'<p class="muted" style="font-size:12px;">Aucun superviseur.</p>'}
+    <div class="grid2" style="margin-top:8px;">
+      <div class="field"><label for="org-em-${o.id}">E-mail du compte</label><input id="org-em-${o.id}" type="email" placeholder="prenom.nom@exemple.fr" autocomplete="off"></div>
+      <div class="field"><label for="org-nm-${o.id}">Nom affiché</label><input id="org-nm-${o.id}" placeholder="Prénom Nom" autocomplete="off"></div>
+    </div>
+    <button class="btn b2 sm" style="width:auto;" onclick="addOrgMember('${o.id}')">Ajouter ce superviseur</button>
+    <p class="muted" style="font-size:12px;margin:14px 0 4px;"><b>Unités rattachées (${o.units.length})</b></p>
+    ${o.units.length?o.units.map(u=>`<div style="padding:3px 0;font-size:13px;">${esc(u.name)} <span class="muted" style="font-size:12px;">depuis le ${fmtDate(u.linked_at)}</span></div>`).join(''):'<p class="muted" style="font-size:12px;">Aucune pour le moment.</p>'}
+  </div>`).join('');
 }
 function supUnitName(id){ const u=state.units.find(x=>x.id===id); return u?u.name:'—'; }
 async function openSupTicket(id){
