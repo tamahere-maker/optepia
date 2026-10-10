@@ -221,6 +221,8 @@ const TURNSTILE_SITE_KEY = '0x4AAAAAAFIxtzEQNiT-i15G';
 let turnstileToken = null;
 const RECOVERY_LINK = /[#&?]type=recovery/.test(location.hash + location.search);
 const LINK_ERROR = /[#&?]error_code=/.test(location.hash + location.search);
+const ABO_RETURN = new URLSearchParams(location.search).get('abonnement');
+if(ABO_RETURN){ try{ history.replaceState(null,'',location.pathname+location.hash); }catch(e){} }
 const sb = (function(){
   try{
     if(typeof supabase === 'undefined' || window.__sbLoadFailed){
@@ -418,9 +420,11 @@ async function loadUnitContext(){
 async function selectMembership(m){
   state.unit = m.units; state.role = m.role; state.myMemberId = m.id; state.myDisplayName = m.display_name; state.activeMembershipId = m.id; state.myAvatarUrl = m.avatar_url || null;
   state.unitOrgs = null; loadUnitOrgs();
+  state.billing = null; loadBilling();
   await Promise.all([loadAccess(), refreshAll()]);
   state.view='home';
   render();
+  if(ABO_RETURN && !state.aboShown){ state.aboShown=true; aboReturned(ABO_RETURN); }
 }
 function selectMembershipById(id){ const m = state.memberships.find(x=>x.id===id); if(m) selectMembership(m); }
 async function openUnitSwitcher(){
@@ -2059,6 +2063,7 @@ function renderProfile(){
 
   ${unitBody ? acc('unit', "<span>🏢 Paramètres de l'unité</span>", unitBody) : ''}
 
+  ${state.role==='administrateur' ? acc('abo', '<span>💳 Abonnement</span>', renderBillingSection()) : ''}
   ${(state.role==='administrateur' || (state.unitOrgs && state.unitOrgs.length)) ? acc('orgs', '<span>🏛️ Groupements</span>', renderOrgsSection()) : ''}
   ${(state.orgs||[]).length ? `<button class="btn btn-secondary" style="margin:10px 0;" onclick="${state.orgs.length===1?`openOrg('${state.orgs[0].org_id}')`:`state.view='orgPicker'; render();`}">📊 Vue groupement (superviseur)</button>` : ''}
 
@@ -2290,6 +2295,68 @@ async function exportOrgAttention(uid){
   const head=['Unité','Désignation','Marque','Identification','Famille','Taille','Statut','Dernier contrôle','Prochain contrôle','Fin de vie'];
   orgCsv([head].concat((data||[]).map(x=>[x.unit_name,x.designation,x.marque,x.identification,x.famille,x.taille,(ORG_ST[x.status]||[x.status])[0],fmtDate(x.last_control),fmtDate(x.next_control),fmtDate(x.date_fin_vie)])),
     uid?'fiches-a-traiter-unite.csv':'fiches-a-traiter-groupement.csv');
+}
+
+/* Abonnement (Stripe) : administrateur de l'unité */
+async function loadBilling(){
+  if(!state.unit || state.role!=='administrateur'){ state.billing=null; return; }
+  const uid=state.unit.id;
+  try{ const {data}=await sb.rpc('unit_billing_info',{p_unit:uid}); if(state.unit && state.unit.id===uid) state.billing=data||{status:'none'}; }
+  catch(e){ if(state.unit && state.unit.id===uid) state.billing={status:'none'}; }
+  if(state.view==='profile') render();
+}
+async function aboReturned(kind){
+  state.profOpen=state.profOpen||{}; state.profOpen.abo=true;
+  if(kind==='ok'){
+    showToast('Paiement reçu — activation en cours…');
+    for(let i=0;i<4;i++){ await new Promise(r=>setTimeout(r,2500)); await Promise.all([loadBilling(),loadAccess()]); if(state.billing && state.billing.has_subscription) break; }
+    render();
+    showToast(state.billing && state.billing.has_subscription ? 'Abonnement activé, merci !' : "Paiement en cours de traitement : l'abonnement s'affichera dans quelques instants.");
+  } else if(kind==='annule') showToast('Paiement annulé : rien n\'a été débité.');
+  else { await Promise.all([loadBilling(),loadAccess()]); render(); }
+}
+function renderBillingSection(){
+  const b=state.billing;
+  if(b===null||b===undefined) return '<div class="muted" style="text-align:center;padding:10px;"><span class="spinner"></span></div>';
+  const fd=d=>{ try{ return new Date(d+'T12:00:00').toLocaleDateString('fr-FR'); }catch(e){ return d||''; } };
+  const itv=b.interval==='year'?'annuel (150 € TTC / an)':b.interval==='month'?'mensuel (15 € TTC / mois)':'';
+  let h='';
+  if(b.has_subscription && (b.status==='actif'||b.status==='impaye')){
+    h+=`<div class="card"><b>${b.status==='actif'?'✅ Abonnement actif':'⚠️ Paiement en échec'}</b>
+      <div class="muted" style="font-size:13px;margin-top:4px;">Formule ${itv||'—'}${b.period_end?`<br>${b.cancel_at_period_end?'Prend fin le ':'Prochain renouvellement le '}${fd(b.period_end)}`:''}${b.cancel_at_period_end?'<br>La résiliation est programmée : l\'accès complet reste ouvert jusqu\'à cette date.':''}</div>
+      ${b.status==='impaye'?'<div style="margin-top:8px;font-size:13px;">Mets à jour ta carte depuis « Gérer mon abonnement » : un délai de 14 jours est accordé avant la lecture seule.</div>':''}</div>
+      <button class="btn btn-secondary" onclick="openBillingPortal()">Gérer mon abonnement (carte, factures, résiliation)</button>`;
+  } else {
+    if(b.status==='essai') h+=`<div class="card"><b>Période d'essai</b><div class="muted" style="font-size:13px;margin-top:4px;">${b.trial_ends?'Jusqu\'au '+fd(b.trial_ends)+'. ':''}Si tu t'abonnes maintenant, le premier prélèvement n'a lieu qu'à la fin de l'essai.</div></div>`;
+    else if(b.status==='resilie') h+=`<div class="card"><b>Abonnement terminé</b><div class="muted" style="font-size:13px;margin-top:4px;">L'unité est en lecture seule. Tu peux te réabonner à tout moment, rien n'a été supprimé.</div></div>`;
+    else if(b.status==='impaye') h+=`<div class="card"><b>Paiement en attente</b><div class="muted" style="font-size:13px;margin-top:4px;">Choisis une formule pour régulariser, ou contacte le support pour un règlement par virement.</div></div>`;
+    h+=`<div class="muted" style="font-size:12px;margin:6px 0;">Prix par unité, TTC. Résiliable à tout moment. Paiement sécurisé par Stripe : Optepia ne voit jamais ton numéro de carte.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-primary" style="flex:1;min-width:140px;" onclick="startSubscribe('month')">15 € / mois</button>
+        <button class="btn btn-primary" style="flex:1;min-width:140px;" onclick="startSubscribe('year')">150 € / an <span style="font-size:11px;">(2 mois offerts)</span></button>
+      </div>
+      <p class="muted" style="font-size:12px;margin-top:8px;">Un règlement par virement est possible pour un groupement : contacte le support.</p>`;
+  }
+  return h;
+}
+async function startSubscribe(interval){
+  showToast('Ouverture du paiement sécurisé…');
+  const {data,error}=await sb.functions.invoke('stripe-checkout',{body:{unit_id:state.unit.id,interval}});
+  const msg=(data&&data.error)||(error&&error.message);
+  if(msg && !(data&&data.url)){ showToast(await stripeErr(error,data)); return; }
+  gotoUrl(data.url);
+}
+async function openBillingPortal(){
+  showToast('Ouverture du portail…');
+  const {data,error}=await sb.functions.invoke('stripe-portal',{body:{unit_id:state.unit.id}});
+  if(!(data&&data.url)){ showToast(await stripeErr(error,data)); return; }
+  gotoUrl(data.url);
+}
+function gotoUrl(u){ window.location.href=u; }
+async function stripeErr(error,data){
+  if(data&&data.error) return data.error;
+  try{ const j=await error.context.json(); if(j&&j.error) return j.error; }catch(e){}
+  return (error&&error.message)||'Erreur de paiement';
 }
 
 /* Côté unité : rattachement à un groupement (administrateur de l'unité) */

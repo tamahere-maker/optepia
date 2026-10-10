@@ -893,6 +893,7 @@ function renderBillingCard(u){
   return `<div class="card">
     <h3 style="color:var(--text);margin-bottom:6px;">Abonnement</h3>
     <p style="font-size:13px;margin:0 0 12px;"><b>Accès de l'unité :</b> <span style="color:${accCol};">${acc.label}</span></p>
+    ${b.stripe_subscription_id?`<p style="font-size:12px;margin:-6px 0 12px;">💳 <b>Abonnement Stripe</b> ${b.billing_interval==='year'?'annuel':b.billing_interval==='month'?'mensuel':''}${b.period_end?` · échéance ${new Date(b.period_end+'T12:00:00').toLocaleDateString('fr-FR')}`:''}${b.cancel_at_period_end?' · résiliation programmée':''}<br><span class="muted">Statut et offre sont mis à jour automatiquement par Stripe : évite de les modifier à la main.</span></p>`:''}
     ${state.sqlMissing?`<p class="muted" style="font-size:12px;">Indisponible tant que le SQL d'installation n'est pas exécuté.</p>`:`
     <div class="grid2">
       <div class="field"><label>Offre</label><input id="bl-plan" value="${esc(b.plan||'essai')}"></div>
