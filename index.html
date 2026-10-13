@@ -3852,27 +3852,76 @@ function renderCheckout(){
   </div>
   <h3 id="co-count-header" style="margin-bottom:10px;">Sélectionner le matériel (${n} sélectionné${n!==1?'s':''})</h3>
   ${available.length>6?`<div class="field"><input id="co-search" type="search" placeholder="Rechercher (désignation, marque, n° série, identification)…" oninput="filterCheckoutList(this.value)"></div>`:''}
-  ${available.length===0?'<p class="muted">Aucun matériel disponible (tout est déjà prêté/sorti).</p>':available.map(e=>`
-    <div class="card tap co-item" data-q="${esc(((e.designation||'')+' '+(e.marque||'')+' '+(e.numero_serie||'')+' '+(e.identification||'')).toLowerCase())}" onclick="const cb=this.querySelector('input[type=checkbox]'); if(event.target!==cb){ cb.checked=!cb.checked; cb.dispatchEvent(new Event('change')); }">
-      <div class="row">
-        <div class="row" style="gap:12px;">
-          <input type="checkbox" ${state.checkoutSelection.includes(e.id)?'checked':''} onchange="onCheckoutCheckboxChange('${e.id}', this.checked)" style="width:20px;height:20px;flex-shrink:0;accent-color:var(--accent);">
-          ${e.photo_url?`<img class="thumb" src="${imgSrc(e.photo_url)}">`:`<div class="thumb"></div>`}
-          <div><div style="font-weight:600;font-size:14px;">${esc(e.designation)}${e.marque?' <span class="muted" style="font-weight:400;">· '+esc(e.marque)+'</span>':''}</div><div class="mono muted" style="font-size:12px;">${equipIds(e)||'—'}</div></div>
-        </div>
-      </div>
-    </div>`).join('')}
+  ${available.length>1?`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+    <button type="button" id="co-group-btn" class="chip ${coPref('coGroup',true)?'active':''}" onclick="setCheckoutView('group')">Regrouper par désignation</button>
+    <select id="co-sort" style="width:auto;padding:7px 10px;font-size:12px;" onchange="setCheckoutView('sort',this.value)"><option value="az" ${coPref('coSort','az')==='az'?'selected':''}>Trier : A → Z</option><option value="za" ${coPref('coSort','az')==='za'?'selected':''}>Trier : Z → A</option></select>
+  </div>`:''}
+  <div id="co-list">${available.length===0?'<p class="muted">Aucun matériel disponible (tout est déjà prêté/sorti).</p>':checkoutListHtml(available)}</div>
   <button id="co-submit-btn" class="btn btn-primary" style="margin:16px 0 48px;" ${state.busy?'disabled':''} onclick="saveCheckout()">${state.busy?'<span class="spinner"></span>':'Confirmer ('+n+' article'+(n!==1?'s':'')+')'}</button>
   `;
+}
+function coPref(k,def){ if(state[k]!==undefined) return state[k]; try{ const v=localStorage.getItem('optepia_'+k); if(v!==null){ state[k]=(typeof def==='boolean')?v==='1':v; return state[k]; } }catch(e){} state[k]=def; return def; }
+function coAvailable(){ return state.equipment.filter(e=>!(e.loans||[]).some(l=>l.status==='en_cours'||l.status==='en_attente')); }
+function coCmp(a,b){ return (a||'').localeCompare(b||'','fr',{numeric:true,sensitivity:'base'}); }
+function coItemQ(e){ return ((e.designation||'')+' '+(e.marque||'')+' '+(e.numero_serie||'')+' '+(e.identification||'')).toLowerCase(); }
+function checkoutListHtml(available){
+  const dir = coPref('coSort','az')==='za' ? -1 : 1;
+  const items = available.slice().sort((a,b)=>dir*coCmp(a.designation,b.designation) || coCmp(a.identification||a.numero_serie,b.identification||b.numero_serie));
+  const sel = id=>state.checkoutSelection.includes(id);
+  if(!coPref('coGroup',true)){
+    state._coGroups=[];
+    return items.map(e=>`
+    <div class="card tap co-item" data-q="${esc(coItemQ(e))}" onclick="const cb=this.querySelector('input[type=checkbox]'); if(event.target!==cb){ cb.checked=!cb.checked; cb.dispatchEvent(new Event('change')); }">
+      <div class="row"><div class="row" style="gap:12px;">
+        <input type="checkbox" data-id="${e.id}" ${sel(e.id)?'checked':''} onchange="onCheckoutCheckboxChange('${e.id}', this.checked)" style="width:20px;height:20px;flex-shrink:0;accent-color:var(--accent);">
+        ${e.photo_url?`<img class="thumb" src="${imgSrc(e.photo_url)}">`:`<div class="thumb"></div>`}
+        <div><div style="font-weight:600;font-size:14px;">${esc(e.designation)}${e.marque?' <span class="muted" style="font-weight:400;">· '+esc(e.marque)+'</span>':''}</div><div class="mono muted" style="font-size:12px;">${equipIds(e)||'—'}</div></div>
+      </div></div>
+    </div>`).join('');
+  }
+  const groups=[], idx={};
+  items.forEach(e=>{ const k=(e.designation||'').trim().toLowerCase(); if(idx[k]===undefined){ idx[k]=groups.length; groups.push({name:e.designation||'—', items:[]}); } groups[idx[k]].items.push(e); });
+  state._coGroups = groups.map(g=>g.items.map(e=>e.id));
+  return groups.map((g,gi)=>{
+    const marques=[...new Set(g.items.map(e=>e.marque).filter(Boolean))];
+    const first=g.items.find(e=>e.photo_url);
+    return `<div class="card co-group" data-q="${esc((g.name+' '+marques.join(' ')).toLowerCase())}">
+      <div class="row" style="gap:12px;align-items:center;margin-bottom:8px;">
+        ${first?`<img class="thumb" src="${imgSrc(first.photo_url)}">`:`<div class="thumb"></div>`}
+        <div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:14px;">${esc(g.name)} <span class="muted" style="font-weight:400;">(${g.items.length})</span></div>${marques.length?`<div class="muted" style="font-size:12px;">${esc(marques.join(', '))}</div>`:''}</div>
+        ${g.items.length>1?`<button type="button" class="chip" onclick="toggleCheckoutGroup(${gi})">Tout</button>`:''}
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        ${g.items.map(e=>{ const ids=[e.identification?esc(e.identification):'',e.numero_serie?'S/N '+esc(e.numero_serie):''].filter(Boolean).join(' · ')||'—'; const mq=(e.marque&&marques.length>1)?' <span class="muted">('+esc(e.marque)+')</span>':'';
+          return `<label class="chip co-chip ${sel(e.id)?'active':''}" data-q="${esc(coItemQ(e))}" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-family:var(--mono,monospace);">
+          <input type="checkbox" data-id="${e.id}" ${sel(e.id)?'checked':''} onchange="onCheckoutCheckboxChange('${e.id}', this.checked)" style="accent-color:var(--accent);margin:0;">${ids}${mq}</label>`; }).join('')}
+      </div></div>`; }).join('');
+}
+function setCheckoutView(what,val){
+  if(what==='group'){ state.coGroup=!coPref('coGroup',true); try{localStorage.setItem('optepia_coGroup',state.coGroup?'1':'0');}catch(e){} const b=document.getElementById('co-group-btn'); if(b) b.classList.toggle('active',state.coGroup); }
+  if(what==='sort'){ state.coSort=val; try{localStorage.setItem('optepia_coSort',val);}catch(e){} }
+  const box=document.getElementById('co-list'); if(box) box.innerHTML=checkoutListHtml(coAvailable());
+  const si=document.getElementById('co-search'); filterCheckoutList(si?si.value:'');
 }
 function filterCheckoutList(q){
   q = (q||'').toLowerCase().trim();
   document.querySelectorAll('.co-item').forEach(el=>{ el.style.display = (!q || (el.dataset.q||'').includes(q)) ? '' : 'none'; });
+  document.querySelectorAll('.co-group').forEach(g=>{
+    const all = !q || (g.dataset.q||'').includes(q); let any=false;
+    g.querySelectorAll('.co-chip').forEach(c=>{ const v = all || (c.dataset.q||'').includes(q); c.style.display=v?'':'none'; if(v) any=true; });
+    g.style.display = any ? '' : 'none';
+  });
+}
+function toggleCheckoutGroup(gi){
+  const ids=(state._coGroups||[])[gi]||[]; const boxes=[...document.querySelectorAll('.co-group')[gi].querySelectorAll('.co-chip')].filter(c=>c.style.display!=='none').map(c=>c.querySelector('input'));
+  const allOn=boxes.every(b=>b.checked);
+  boxes.forEach(b=>{ if(b.checked===allOn){ b.checked=!allOn; onCheckoutCheckboxChange(b.dataset.id, b.checked); } });
 }
 function onCheckoutCheckboxChange(id, checked){
   const i = state.checkoutSelection.indexOf(id);
   if(checked && i<0) state.checkoutSelection.push(id);
   if(!checked && i>=0) state.checkoutSelection.splice(i,1);
+  document.querySelectorAll('.co-chip input[data-id="'+id+'"]').forEach(cb=>cb.closest('.co-chip').classList.toggle('active',checked));
   const n = state.checkoutSelection.length;
   const header = document.getElementById('co-count-header');
   if(header) header.textContent = `Sélectionner le matériel (${n} sélectionné${n!==1?'s':''})`;
