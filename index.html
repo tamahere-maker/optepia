@@ -3739,7 +3739,7 @@ function renderLoanBatchCard(items, type, status){
       ${status==='en_attente'?`<span class="badge badge-warn">À valider</span>`:''}
     </div>
     <div style="margin-top:10px;">
-      ${items.map(l=>`<div class="muted" style="font-size:13px;padding:5px 0;border-top:1px solid var(--border);">${esc(l._equip.designation)} <span class="mono">${equipIds(l._equip)}</span></div>`).join('')}
+      ${loanItemsGrouped(items,false)}
     </div>
     ${status==='en_cours' && can('gererPret') ? `<button class="btn btn-primary" style="margin-top:12px;" onclick="event.stopPropagation(); startBatchReturn('${key}','${type}')">${type==='pret'?'Marquer restitué':'Marquer rentré'}</button>` : ''}
     ${status==='en_attente' && can('validerPret') ? `<div class="btn-row" style="margin-top:12px;">
@@ -3748,6 +3748,18 @@ function renderLoanBatchCard(items, type, status){
     </div>` : ''}
     ${isPast && first.return_signature_url ? `<img src="${imgSrc(first.return_signature_url)}" onerror="imgFallback(this)" style="height:36px;background:#fff;border-radius:4px;margin-top:8px;">`:''}
   </div>`;
+}
+function loanItemsGrouped(items, clickable){
+  const sorted = items.slice().sort((a,b)=>coCmp(a._equip.designation,b._equip.designation)||coCmp(a._equip.identification||a._equip.numero_serie,b._equip.identification||b._equip.numero_serie));
+  const groups=[], idx={};
+  sorted.forEach(l=>{ const k=(l._equip.designation||'').trim().toLowerCase(); if(idx[k]===undefined){ idx[k]=groups.length; groups.push({name:l._equip.designation||'—',items:[]}); } groups[idx[k]].items.push(l); });
+  return groups.map(g=>{
+    const chips=g.items.map(l=>{ const e=l._equip; const t=[e.identification?esc(e.identification):'',e.numero_serie?'S/N '+esc(e.numero_serie):''].filter(Boolean).join(' · ')||'—';
+      return `<span class="chip" style="display:inline-block;font-family:var(--mono,monospace);${clickable?'cursor:pointer;':''}"${clickable?` onclick="state.detailId='${e.id}'; state.view='detail'; render();"`:''}>${t}</span>`; }).join('');
+    return clickable
+      ? `<div class="card"><div style="font-weight:600;font-size:14px;margin-bottom:8px;">${esc(g.name)} <span class="muted" style="font-weight:400;">(${g.items.length})</span></div><div style="display:flex;flex-wrap:wrap;gap:6px;">${chips}</div></div>`
+      : `<div style="font-size:13px;padding:6px 0;border-top:1px solid var(--border);"><div style="font-weight:600;margin-bottom:4px;">${esc(g.name)} <span class="muted" style="font-weight:400;">(${g.items.length})</span></div><div style="display:flex;flex-wrap:wrap;gap:5px;">${chips}</div></div>`;
+  }).join('');
 }
 function openBatchDetail(batchKey, type){ state.batchDetailKey=batchKey; state.batchDetailType=type; state.view='batchDetail'; render(); }
 function renderBatchDetailView(){
@@ -3776,10 +3788,7 @@ function renderBatchDetailView(){
     <button class="btn btn-danger" onclick="rejectLoanBatch('${batchKey}')">Refuser</button>
   </div>` : ''}
   <h3 style="margin-bottom:10px;">Matériel (${items.length})</h3>
-  ${items.map(l=>`
-    <div class="card tap" onclick="state.detailId='${l._equip.id}'; state.view='detail'; render();">
-      <div class="row"><div><div style="font-weight:600;">${esc(l._equip.designation)}</div><div class="mono muted" style="font-size:12px;">${equipIds(l._equip)}</div></div><span class="muted">›</span></div>
-    </div>`).join('')}
+  ${loanItemsGrouped(items,true)}
   ${(first.status==='restitue') ? `
   <h3 style="margin:20px 0 10px;">${type==='pret'?'Restitution':'Retour'}</h3>
   <div class="card">
