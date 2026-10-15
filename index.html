@@ -1328,6 +1328,7 @@ function renderView(){
   switch(state.view){
     case 'home': return renderHome();
     case 'loanSheet': return renderLoanSheet();
+    case 'outSheet': return renderOutSheet();
     case 'inspection': return renderInspection();
     case 'inspectionDoc': return renderInspectionDoc();
     case 'inventoryDoc': return renderInventoryDoc();
@@ -3716,7 +3717,7 @@ function renderLoansTab(){
   ${can('gererPret')?`<button class="btn btn-primary" style="margin-bottom:18px;" onclick="startCheckout('${tab}')">+ ${tab==='pret'?'Nouveau prêt':'Nouvelle sortie mission'}</button>`:''}
   ${Object.keys(pendingGroups).length>0?`<h3 style="margin-bottom:10px;color:var(--warn);">En attente de validation</h3>${Object.keys(pendingGroups).map(k=>renderLoanBatchCard(pendingGroups[k], tab, 'en_attente')).join('')}<div class="divider"></div>`:''}
   <h3 style="margin-bottom:10px;">En cours</h3>
-  ${allLoans().some(l=>l.status==='en_cours')?`<button class="btn btn-secondary" style="margin-bottom:12px;" onclick="exportLoansOut()">⬇ Exporter le matériel sorti (CSV)</button>`:''}
+  ${allLoans().some(l=>l.status==='en_cours')?`<button class="btn btn-secondary" style="margin-bottom:12px;" onclick="openOutSheet()">🖨 Exporter le matériel sorti (PDF)</button>`:''}
   ${Object.keys(currentGroups).length===0?'<p class="muted" style="margin-bottom:20px;">Rien en cours.</p>':Object.keys(currentGroups).map(k=>renderLoanBatchCard(currentGroups[k], tab, 'en_cours')).join('')}
   <div class="divider"></div>
   <h3 style="margin-bottom:10px;">Historique</h3>
@@ -3765,13 +3766,55 @@ function loanItemsGrouped(items, clickable){
       : `<div style="font-size:13px;padding:8px 0;border-top:1px solid var(--border);display:flex;gap:12px;align-items:flex-start;">${th}${body}</div>`;
   }).join('');
 }
-function exportLoansOut(){
-  const rows=allLoans().filter(l=>l.status==='en_cours').sort((a,b)=>coCmp(a.type,b.type)||coCmp(a.borrower_name,b.borrower_name)||coCmp(a._equip.designation,b._equip.designation)||coCmp(a._equip.identification||a._equip.numero_serie,b._equip.identification||b._equip.numero_serie));
-  if(!rows.length){ showToast('Aucun matériel sorti'); return; }
-  const late=(l)=>l.expected_return_date && l.expected_return_date < new Date().toISOString().slice(0,10) ? 'Oui' : '';
-  const head=['Type','Mission / Emprunteur','Date de sortie','Retour prévu','En retard','Désignation','Marque','Identification','N° série','Famille'];
-  orgCsv([head].concat(rows.map(l=>[l.type==='pret'?'Prêt':'Mission',l.borrower_name,fmtDate(l.checkout_date),fmtDate(l.expected_return_date).replace('—',''),late(l),l._equip.designation,l._equip.marque,l._equip.identification,l._equip.numero_serie,l._equip.famille])),
-    'materiel-sorti-'+new Date().toISOString().slice(0,10)+'.csv');
+function openOutSheet(){ state.outSheetType = state.outSheetType||'all'; state.view='outSheet'; render(); window.scrollTo(0,0); }
+function setOutSheetType(v){ state.outSheetType=v; render(); }
+function renderOutSheet(){
+  const t = state.outSheetType||'all';
+  const cur = allLoans().filter(l=>l.status==='en_cours' && (t==='all'||l.type===t));
+  const groups = groupLoansByBatch(cur);
+  const batches = Object.keys(groups).map(k=>groups[k].slice().sort((a,b)=>coCmp(a._equip.designation,b._equip.designation)||coCmp(a._equip.identification||a._equip.numero_serie,b._equip.identification||b._equip.numero_serie)))
+    .sort((a,b)=>coCmp(a[0].type,b[0].type) || (a[0].checkout_date||'').localeCompare(b[0].checkout_date||'') || coCmp(a[0].borrower_name,b[0].borrower_name));
+  const now = new Date(), today = now.toISOString().slice(0,10);
+  const sig = u=>u?`<img src="${imgSrc(u)}" onerror="imgFallback(this)" style="height:60px;max-width:100%;border:1px solid #bbb;border-radius:4px;background:#fff;">`:'<span style="color:#888;">—</span>';
+  const nItems = cur.length;
+  const block = items=>{
+    const times = items.map(l=>l.checkout_at?new Date(l.checkout_at).getTime():0).filter(Boolean);
+    const t0 = times.length?Math.min(...times):0;
+    const f = items.find(l=>!l.checkout_at||new Date(l.checkout_at).getTime()===t0)||items[0];
+    const isPret = f.type==='pret', late = f.expected_return_date && f.expected_return_date<today;
+    const added = l=>{ if(!l.checkout_at||!t0) return ''; const d=new Date(l.checkout_at).getTime()-t0; return d>120000 ? `Ajouté le ${esc(new Date(l.checkout_at).toLocaleDateString('fr-FR')+' à '+fmtHM(l.checkout_at))}${l.created_by_name?' par '+esc(l.created_by_name):''}` : ''; };
+    return `<div style="page-break-inside:avoid;border:1px solid #c8c8c8;border-radius:6px;padding:10px 12px;margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:11px;font-weight:700;letter-spacing:1px;color:#0A9FA0;">${isPret?'PRÊT':'MISSION'}</div>
+          <div style="font-size:15px;font-weight:700;">${esc(f.borrower_name)}</div>
+          <div style="font-size:12px;color:#333;margin-top:2px;">${isPret?'Perçu':'Sorti'} le ${esc(fmtDT(f.checkout_date,f.checkout_at).replace('&nbsp;',' '))}${f.expected_return_date?` · retour prévu le ${fmtDate(f.expected_return_date)}${late?' <b style="color:#b00020;">(en retard)</b>':''}`:''}</div>
+          <div style="font-size:12px;color:#555;">Enregistré par ${esc(f.created_by_name||'—')}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0;"><div style="font-size:10px;color:#555;margin-bottom:2px;">Signature</div>${sig(f.checkout_signature_url)}</div>
+      </div>
+      <table class="sheet-t" style="margin-top:8px;">
+        <tr><th style="width:26px;">#</th><th>Désignation</th><th>Marque</th><th>Identification</th><th>N° de série</th><th>Modification</th></tr>
+        ${items.map((l,i)=>`<tr><td>${i+1}</td><td>${esc(l._equip.designation)}</td><td>${esc(l._equip.marque||'')}</td><td>${esc(l._equip.identification||'')}</td><td>${esc(l._equip.numero_serie||'')}</td><td style="font-size:11px;">${added(l)}</td></tr>`).join('')}
+      </table></div>`;
+  };
+  return `
+  <div class="noprint">
+    <div class="backlink" onclick="goto('loans')">‹ Retour</div>
+    <div class="field"><label>Contenu</label><select onchange="setOutSheetType(this.value)"><option value="all" ${t==='all'?'selected':''}>Missions et prêts</option><option value="mission" ${t==='mission'?'selected':''}>Missions seulement</option><option value="pret" ${t==='pret'?'selected':''}>Prêts seulement</option></select></div>
+    <button class="btn btn-primary" style="margin-bottom:14px;" onclick="window.print()">🖨 Imprimer / Enregistrer en PDF</button>
+    <p class="muted" style="font-size:12px;margin-bottom:12px;">Dans la fenêtre d'impression, choisis « Enregistrer au format PDF » pour obtenir un fichier.</p>
+  </div>
+  <div class="sheet">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0A9FA0;padding-bottom:8px;margin-bottom:14px;">
+      <div style="display:flex;align-items:center;gap:12px;"><img src="logo-mark.png" alt="" style="height:38px;width:auto;"><div><div style="font-size:19px;font-weight:700;letter-spacing:2px;">OPTEPIA</div><div style="color:#555;">${esc(state.unit.name)}</div></div></div>
+      <div style="text-align:right;color:#555;font-size:12px;">Édité le ${now.toLocaleDateString('fr-FR')} à ${now.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}<br>par ${esc(state.myDisplayName)}</div>
+    </div>
+    <h1 style="font-size:18px;margin:0 0 4px;">Matériel actuellement sorti</h1>
+    <p style="color:#555;font-size:12px;margin:0 0 14px;">${batches.length} sortie${batches.length!==1?'s':''} en cours · ${nItems} article${nItems!==1?'s':''}</p>
+    ${batches.length?batches.map(block).join(''):'<p style="color:#555;">Aucun matériel sorti.</p>'}
+    <p style="color:#888;font-size:11px;margin-top:22px;">Document généré par Optepia — registre du matériel.</p>
+  </div>`;
 }
 function openBatchDetail(batchKey, type){ state.batchDetailKey=batchKey; state.batchDetailType=type; state.view='batchDetail'; render(); }
 function renderBatchDetailView(){
