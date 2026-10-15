@@ -1328,7 +1328,6 @@ function renderView(){
   switch(state.view){
     case 'home': return renderHome();
     case 'loanSheet': return renderLoanSheet();
-    case 'outSheet': return renderOutSheet();
     case 'inspection': return renderInspection();
     case 'inspectionDoc': return renderInspectionDoc();
     case 'inventoryDoc': return renderInventoryDoc();
@@ -3717,8 +3716,7 @@ function renderLoansTab(){
   ${can('gererPret')?`<button class="btn btn-primary" style="margin-bottom:18px;" onclick="startCheckout('${tab}')">+ ${tab==='pret'?'Nouveau prêt':'Nouvelle sortie mission'}</button>`:''}
   ${Object.keys(pendingGroups).length>0?`<h3 style="margin-bottom:10px;color:var(--warn);">En attente de validation</h3>${Object.keys(pendingGroups).map(k=>renderLoanBatchCard(pendingGroups[k], tab, 'en_attente')).join('')}<div class="divider"></div>`:''}
   <h3 style="margin-bottom:10px;">En cours</h3>
-  ${allLoans().some(l=>l.status==='en_cours')?`<button class="btn btn-secondary" style="margin-bottom:12px;" onclick="openOutSheet()">🖨 Exporter le matériel sorti (PDF)</button>`:''}
-  ${Object.keys(currentGroups).length===0?'<p class="muted" style="margin-bottom:20px;">Rien en cours.</p>':Object.keys(currentGroups).map(k=>renderLoanBatchCard(currentGroups[k], tab, 'en_cours')).join('')}
+    ${Object.keys(currentGroups).length===0?'<p class="muted" style="margin-bottom:20px;">Rien en cours.</p>':Object.keys(currentGroups).map(k=>renderLoanBatchCard(currentGroups[k], tab, 'en_cours')).join('')}
   <div class="divider"></div>
   <h3 style="margin-bottom:10px;">Historique</h3>
   ${Object.keys(pastGroups).length===0?'<p class="muted">Aucun historique.</p>':Object.keys(pastGroups).map(k=>renderLoanBatchCard(pastGroups[k], tab, 'past')).join('')}
@@ -3766,70 +3764,29 @@ function loanItemsGrouped(items, clickable){
       : `<div style="font-size:13px;padding:8px 0;border-top:1px solid var(--border);display:flex;gap:12px;align-items:flex-start;">${th}${body}</div>`;
   }).join('');
 }
-function openOutSheet(){ state.outSheetType = state.outSheetType||'all'; state.view='outSheet'; render(); window.scrollTo(0,0); }
-function setOutSheetType(v){ state.outSheetType=v; render(); }
-function renderOutSheet(){
-  const t = state.outSheetType||'all';
-  const cur = allLoans().filter(l=>l.status==='en_cours' && (t==='all'||l.type===t));
-  const groups = groupLoansByBatch(cur);
-  const batches = Object.keys(groups).map(k=>groups[k].slice().sort((a,b)=>coCmp(a._equip.designation,b._equip.designation)||coCmp(a._equip.identification||a._equip.numero_serie,b._equip.identification||b._equip.numero_serie)))
-    .sort((a,b)=>coCmp(a[0].type,b[0].type) || coCmp(a[0].borrower_name,b[0].borrower_name) || (a[0].checkout_date||'').localeCompare(b[0].checkout_date||''));
-  const now = new Date(), today = now.toISOString().slice(0,10);
-  const sig = u=>u?`<img src="${imgSrc(u)}" onerror="imgFallback(this)" style="height:60px;max-width:100%;border:1px solid #bbb;border-radius:4px;background:#fff;">`:'<span style="color:#888;">—</span>';
-  const nItems = cur.length;
-  const block = items=>{
-    const times = items.map(l=>l.checkout_at?new Date(l.checkout_at).getTime():0).filter(Boolean);
-    const t0 = times.length?Math.min(...times):0;
-    const f = items.find(l=>!l.checkout_at||new Date(l.checkout_at).getTime()===t0)||items[0];
-    const isPret = f.type==='pret', late = f.expected_return_date && f.expected_return_date<today;
-    const added = l=>{ if(!l.checkout_at||!t0) return ''; const d=new Date(l.checkout_at).getTime()-t0; return d>120000 ? `Ajouté le ${esc(new Date(l.checkout_at).toLocaleDateString('fr-FR')+' à '+fmtHM(l.checkout_at))}${l.created_by_name?' par '+esc(l.created_by_name):''}` : ''; };
-    const fams={};
-    items.forEach(l=>{ const fk=l._equip.famille||'Sans famille'; const dk=(l._equip.designation||'').trim().toLowerCase(); const F=(fams[fk]=fams[fk]||{}); (F[dk]=F[dk]||[]).push(l); });
-    const famHtml=Object.keys(fams).sort(coCmp).map(fk=>{
-      const des=Object.keys(fams[fk]).sort(coCmp);
-      return `<div style="font-size:12px;font-weight:700;color:#0A9FA0;border-bottom:1px solid #0A9FA0;margin:12px 0 6px;padding-bottom:2px;page-break-after:avoid;">${esc(fk)}</div>`+des.map(dk=>{
-        const g=fams[fk][dk].slice().sort((x,y)=>coCmp(x._equip.identification||x._equip.numero_serie,y._equip.identification||y._equip.numero_serie));
-        const e0=g[0]._equip, ph=g.map(l=>l._equip).find(e=>e.photo_url);
-        const marques=[...new Set(g.map(l=>l._equip.marque).filter(Boolean))].join(', ');
-        const cells=g.map(l=>{ const e=l._equip, ad=added(l);
-          return `<div style="border:1px solid #d5d5d5;border-radius:4px;padding:3px 6px;font-size:11px;page-break-inside:avoid;"><b>${esc(e.identification||'—')}</b><br><span style="color:#444;">${e.numero_serie?'S/N '+esc(e.numero_serie):'—'}</span>${ad?`<br><span style="color:#b00020;font-size:10px;">${ad}</span>`:''}</div>`; }).join('');
-        return `<div style="margin-bottom:10px;page-break-inside:avoid;">
-          <div style="display:flex;gap:10px;align-items:center;margin-bottom:5px;">
-            ${ph?`<img src="${imgSrc(ph.photo_url)}" onerror="imgFallback(this)" style="height:64px;width:64px;object-fit:contain;border:1px solid #ccc;border-radius:4px;background:#fff;flex-shrink:0;">`:`<div style="height:64px;width:64px;border:1px dashed #ccc;border-radius:4px;flex-shrink:0;"></div>`}
-            <div><div style="font-size:13px;font-weight:700;">${esc(e0.designation)} <span style="font-weight:400;color:#555;">(${g.length})</span></div>${marques?`<div style="font-size:11px;color:#555;">${esc(marques)}</div>`:''}</div>
-          </div>
-          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;">${cells}</div></div>`;
-      }).join('');
-    }).join('');
-    return `<div style="border:1px solid #c8c8c8;border-radius:6px;padding:10px 12px;margin-bottom:16px;">
-      <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;page-break-inside:avoid;page-break-after:avoid;">
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:11px;font-weight:700;letter-spacing:1px;color:#0A9FA0;">${isPret?'PRÊT':'MISSION'} · ${items.length} ARTICLE${items.length!==1?'S':''}</div>
-          <div style="font-size:15px;font-weight:700;">${esc(f.borrower_name)}</div>
-          <div style="font-size:12px;color:#333;margin-top:2px;">${isPret?'Perçu':'Sorti'} le ${esc(fmtDT(f.checkout_date,f.checkout_at).replace('&nbsp;',' '))}${f.expected_return_date?` · retour prévu le ${fmtDate(f.expected_return_date)}${late?' <b style="color:#b00020;">(en retard)</b>':''}`:''}</div>
-          <div style="font-size:12px;color:#555;">Enregistré par ${esc(f.created_by_name||'—')}</div>
+function loanFamHtml(items){
+  const times = items.map(l=>l.checkout_at?new Date(l.checkout_at).getTime():0).filter(Boolean);
+  const t0 = times.length?Math.min(...times):0;
+  const added = l=>{ if(!l.checkout_at||!t0) return ''; const d=new Date(l.checkout_at).getTime()-t0; return d>120000 ? `Ajouté le ${esc(new Date(l.checkout_at).toLocaleDateString('fr-FR')+' à '+fmtHM(l.checkout_at))}${l.created_by_name?' par '+esc(l.created_by_name):''}` : ''; };
+  const fams={};
+  items.forEach(l=>{ const fk=l._equip.famille||'Sans famille'; const dk=(l._equip.designation||'').trim().toLowerCase(); const F=(fams[fk]=fams[fk]||{}); (F[dk]=F[dk]||[]).push(l); });
+  const famHtml=Object.keys(fams).sort(coCmp).map(fk=>{
+    const des=Object.keys(fams[fk]).sort(coCmp);
+    return `<div style="font-size:12px;font-weight:700;color:#0A9FA0;border-bottom:1px solid #0A9FA0;margin:12px 0 6px;padding-bottom:2px;page-break-after:avoid;">${esc(fk)}</div>`+des.map(dk=>{
+      const g=fams[fk][dk].slice().sort((x,y)=>coCmp(x._equip.identification||x._equip.numero_serie,y._equip.identification||y._equip.numero_serie));
+      const e0=g[0]._equip, ph=g.map(l=>l._equip).find(e=>e.photo_url);
+      const marques=[...new Set(g.map(l=>l._equip.marque).filter(Boolean))].join(', ');
+      const cells=g.map(l=>{ const e=l._equip, ad=added(l);
+        return `<div style="border:1px solid #d5d5d5;border-radius:4px;padding:3px 6px;font-size:11px;page-break-inside:avoid;"><b>${esc(e.identification||'—')}</b><br><span style="color:#444;">${e.numero_serie?'S/N '+esc(e.numero_serie):'—'}</span>${ad?`<br><span style="color:#b00020;font-size:10px;">${ad}</span>`:''}</div>`; }).join('');
+      return `<div style="margin-bottom:10px;page-break-inside:avoid;">
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:5px;">
+          ${ph?`<img src="${imgSrc(ph.photo_url)}" onerror="imgFallback(this)" style="height:64px;width:64px;object-fit:contain;border:1px solid #ccc;border-radius:4px;background:#fff;flex-shrink:0;">`:`<div style="height:64px;width:64px;border:1px dashed #ccc;border-radius:4px;flex-shrink:0;"></div>`}
+          <div><div style="font-size:13px;font-weight:700;">${esc(e0.designation)} <span style="font-weight:400;color:#555;">(${g.length})</span></div>${marques?`<div style="font-size:11px;color:#555;">${esc(marques)}</div>`:''}</div>
         </div>
-        <div style="text-align:right;flex-shrink:0;"><div style="font-size:10px;color:#555;margin-bottom:2px;">Signature</div>${sig(f.checkout_signature_url)}</div>
-      </div>
-      ${famHtml}</div>`;
-  };
-  return `
-  <div class="noprint">
-    <div class="backlink" onclick="goto('loans')">‹ Retour</div>
-    <div class="field"><label>Contenu</label><select onchange="setOutSheetType(this.value)"><option value="all" ${t==='all'?'selected':''}>Missions et prêts</option><option value="mission" ${t==='mission'?'selected':''}>Missions seulement</option><option value="pret" ${t==='pret'?'selected':''}>Prêts seulement</option></select></div>
-    <button class="btn btn-primary" style="margin-bottom:14px;" onclick="window.print()">🖨 Imprimer / Enregistrer en PDF</button>
-    <p class="muted" style="font-size:12px;margin-bottom:12px;">Dans la fenêtre d'impression, choisis « Enregistrer au format PDF » pour obtenir un fichier.</p>
-  </div>
-  <div class="sheet">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0A9FA0;padding-bottom:8px;margin-bottom:14px;">
-      <div style="display:flex;align-items:center;gap:12px;"><img src="logo-mark.png" alt="" style="height:38px;width:auto;"><div><div style="font-size:19px;font-weight:700;letter-spacing:2px;">OPTEPIA</div><div style="color:#555;">${esc(state.unit.name)}</div></div></div>
-      <div style="text-align:right;color:#555;font-size:12px;">Édité le ${now.toLocaleDateString('fr-FR')} à ${now.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}<br>par ${esc(state.myDisplayName)}</div>
-    </div>
-    <h1 style="font-size:18px;margin:0 0 4px;">Matériel actuellement sorti</h1>
-    <p style="color:#555;font-size:12px;margin:0 0 14px;">${batches.length} sortie${batches.length!==1?'s':''} en cours · ${nItems} article${nItems!==1?'s':''}</p>
-    ${batches.length?batches.map(block).join(''):'<p style="color:#555;">Aucun matériel sorti.</p>'}
-    <p style="color:#888;font-size:11px;margin-top:22px;">Document généré par Optepia — registre du matériel.</p>
-  </div>`;
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;">${cells}</div></div>`;
+    }).join('');
+  }).join('');
+  return famHtml;
 }
 function openBatchDetail(batchKey, type){ state.batchDetailKey=batchKey; state.batchDetailType=type; state.view='batchDetail'; render(); }
 function renderBatchDetailView(){
@@ -4332,11 +4289,8 @@ function renderLoanSheet(){
       ${row('Statut', statut)}
       ${f.status==='refuse'?row('Motif du refus', esc(f.refusal_reason||'—')):''}
     </table>
-    <h3 style="color:#111;font-size:14px;margin:16px 0 6px;">Matériel (${items.length})</h3>
-    <table class="sheet-t">
-      <tr><th style="width:28px;">#</th><th>Désignation</th><th>Marque</th><th>N° de série</th><th>Identification</th></tr>
-      ${items.map((l,i)=>`<tr><td>${i+1}</td><td>${esc(l._equip.designation)}</td><td>${esc(l._equip.marque||'')}</td><td>${esc(l._equip.numero_serie||'')}</td><td>${esc(l._equip.identification||'')}</td></tr>`).join('')}
-    </table>
+    <h3 style="color:#111;font-size:14px;margin:16px 0 0;">Matériel (${items.length})</h3>
+    ${loanFamHtml(items)}
     <div style="display:flex;gap:16px;margin-top:18px;">
       <div style="flex:1;"><div style="font-weight:700;margin-bottom:6px;">Signature à la ${isPret?'perception':'sortie'}</div>${sig(f.checkout_signature_url)}</div>
       ${f.status==='restitue'?`<div style="flex:1;"><div style="font-weight:700;margin-bottom:6px;">Signature au ${isPret?'retour':'retour de mission'}</div>${sig(f.return_signature_url)}</div>`:''}
