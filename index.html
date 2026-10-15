@@ -3869,8 +3869,33 @@ function renderCheckout(){
       <button type="button" class="btn btn-ghost" style="width:auto;margin-top:6px;" onclick="clearSignature()">Effacer la signature</button>
     </div>
   </div>
+  ${type==='mission'?coReuseHtml():''}
   ${checkoutPickerHtml(false)}
   `;
+}
+function coPastMissions(){
+  const m={};
+  allLoans().filter(l=>l.type==='mission' && l.status==='restitue').forEach(l=>{ const k=l.batch_id||l.id; (m[k]=m[k]||{key:k,name:l.borrower_name,date:l.checkout_date||'',ids:[]}).ids.push(l.equipment_id); });
+  return Object.values(m).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,30);
+}
+function coReuseHtml(){
+  const ms=coPastMissions(); if(!ms.length) return '';
+  return `<div class="card"><div class="field" style="margin:0;"><label>Reprendre le matériel d'une mission terminée</label>
+    <select id="co-reuse" onchange="coReuse(this.value)"><option value="">— Choisir (optionnel) —</option>${ms.map(m=>`<option value="${esc(m.key)}">${esc(m.name)} · ${fmtDate(m.date)} (${m.ids.length} article${m.ids.length!==1?'s':''})</option>`).join('')}</select>
+    <p id="co-reuse-msg" class="muted" style="font-size:12px;margin-top:6px;">Présélectionne le même matériel ; tu peux ensuite l'ajuster.</p></div></div>`;
+}
+function coReuse(key){
+  if(!key) return;
+  const m=coPastMissions().find(x=>x.key===key); if(!m) return;
+  const avail=new Set(coAvailable().map(e=>e.id));
+  const ok=m.ids.filter(id=>avail.has(id));
+  state.checkoutSelection=ok.slice();
+  setCheckoutView();
+  const n=ok.length;
+  const h=document.getElementById('co-count-header'); if(h) h.textContent=`Sélectionner le matériel (${n} sélectionné${n!==1?'s':''})`;
+  const b=document.getElementById('co-submit-btn'); if(b && !state.busy) b.textContent=`Confirmer (${n} article${n!==1?'s':''})`;
+  const miss=m.ids.length-ok.length;
+  const msg=document.getElementById('co-reuse-msg'); if(msg) msg.textContent=miss>0?`${ok.length} repris, ${miss} indisponible${miss>1?'s':''} (déjà sorti ou supprimé).`:`${ok.length} article${ok.length!==1?'s':''} repris.`;
 }
 function checkoutPickerHtml(adding){
   const available = coAvailable();
