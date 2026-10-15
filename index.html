@@ -3743,7 +3743,7 @@ function renderLoanBatchCard(items, type, status){
     <div style="margin-top:10px;">
       ${loanItemsGrouped(items,false)}
     </div>
-    ${status==='en_cours' && can('gererPret') ? `${type==='mission'?`<button class="btn btn-secondary" style="margin-top:12px;" onclick="event.stopPropagation(); startAddToMission('${key}')">+ Ajouter du matériel</button>`:''}<button class="btn btn-primary" style="margin-top:12px;" onclick="event.stopPropagation(); startBatchReturn('${key}','${type}')">${type==='pret'?'Marquer restitué':'Marquer rentré'}</button>` : ''}
+    ${status==='en_cours' && can('gererPret') ? `<button class="btn btn-secondary" style="margin-top:12px;" onclick="event.stopPropagation(); startAddToMission('${key}','${type}')">+ Ajouter du matériel</button><button class="btn btn-primary" style="margin-top:12px;" onclick="event.stopPropagation(); startBatchReturn('${key}','${type}')">${type==='pret'?'Marquer restitué':'Marquer rentré'}</button>` : ''}
     ${status==='en_attente' && can('validerPret') ? `<div class="btn-row" style="margin-top:12px;">
       <button class="btn btn-primary" onclick="event.stopPropagation(); validateLoanBatch('${key}')">Valider</button>
       <button class="btn btn-danger" onclick="event.stopPropagation(); rejectLoanBatch('${key}')">Refuser</button>
@@ -3773,7 +3773,7 @@ function renderOutSheet(){
   const cur = allLoans().filter(l=>l.status==='en_cours' && (t==='all'||l.type===t));
   const groups = groupLoansByBatch(cur);
   const batches = Object.keys(groups).map(k=>groups[k].slice().sort((a,b)=>coCmp(a._equip.designation,b._equip.designation)||coCmp(a._equip.identification||a._equip.numero_serie,b._equip.identification||b._equip.numero_serie)))
-    .sort((a,b)=>coCmp(a[0].type,b[0].type) || (a[0].checkout_date||'').localeCompare(b[0].checkout_date||'') || coCmp(a[0].borrower_name,b[0].borrower_name));
+    .sort((a,b)=>coCmp(a[0].type,b[0].type) || coCmp(a[0].borrower_name,b[0].borrower_name) || (a[0].checkout_date||'').localeCompare(b[0].checkout_date||''));
   const now = new Date(), today = now.toISOString().slice(0,10);
   const sig = u=>u?`<img src="${imgSrc(u)}" onerror="imgFallback(this)" style="height:60px;max-width:100%;border:1px solid #bbb;border-radius:4px;background:#fff;">`:'<span style="color:#888;">—</span>';
   const nItems = cur.length;
@@ -3844,7 +3844,7 @@ function renderBatchDetailView(){
   </div>` : ''}
   <h3 style="margin-bottom:10px;">Matériel (${items.length})</h3>
   ${loanItemsGrouped(items,true)}
-  ${isCurrent && type==='mission' && can('gererPret')?`<button class="btn btn-secondary" style="margin-top:4px;" onclick="startAddToMission('${batchKey}')">+ Ajouter du matériel</button>`:''}
+  ${isCurrent && can('gererPret')?`<button class="btn btn-secondary" style="margin-top:4px;" onclick="startAddToMission('${batchKey}','${type}')">+ Ajouter du matériel</button>`:''}
   ${(first.status==='restitue') ? `
   <h3 style="margin:20px 0 10px;">${type==='pret'?'Restitution':'Retour'}</h3>
   <div class="card">
@@ -3899,8 +3899,8 @@ async function confirmRefuse(){
   showToast('Prêt refusé');
 }
 function startCheckout(type){ state.checkoutType=type; state.checkoutSelection=[]; state.checkoutAddTo=null; state.view='checkout'; render(); }
-function startAddToMission(batchKey){ state.checkoutType='mission'; state.checkoutSelection=[]; state.checkoutAddTo=batchKey; state.view='checkout'; render(); }
-function coAddBatch(){ if(!state.checkoutAddTo) return null; const it=allLoans().filter(l=>(l.batch_id||l.id)===state.checkoutAddTo && l.type==='mission' && l.status==='en_cours'); return it.length?it:null; }
+function startAddToMission(batchKey,type){ state.checkoutType=type||'mission'; state.checkoutSelection=[]; state.checkoutAddTo=batchKey; state.view='checkout'; render(); }
+function coAddBatch(){ if(!state.checkoutAddTo) return null; const it=allLoans().filter(l=>(l.batch_id||l.id)===state.checkoutAddTo && l.type===state.checkoutType && l.status==='en_cours'); return it.length?it:null; }
 function renderCheckout(){
   const type = state.checkoutType;
   const available = state.equipment.filter(e=>!(e.loans||[]).some(l=>l.status==='en_cours'||l.status==='en_attente')).slice().sort((a,b)=>(a.designation||'').localeCompare(b.designation||''));
@@ -3908,9 +3908,9 @@ function renderCheckout(){
   const addB = coAddBatch();
   if(state.checkoutAddTo && !addB) state.checkoutAddTo=null;
   if(addB) return `
-  <div class="backlink" onclick="openBatchDetail('${state.checkoutAddTo}','mission')">‹ Annuler</div>
+  <div class="backlink" onclick="openBatchDetail('${state.checkoutAddTo}','${type}')">‹ Annuler</div>
   <h2>Ajouter du matériel</h2>
-  <p class="muted" style="margin-bottom:16px;">Mission : ${esc(addB[0].borrower_name)} — ${addB.length} article${addB.length!==1?'s':''} déjà sorti${addB.length!==1?'s':''}. La signature de départ est conservée.</p>
+  <p class="muted" style="margin-bottom:16px;">${type==='pret'?'Prêt à':'Mission'} : ${esc(addB[0].borrower_name)} — ${addB.length} article${addB.length!==1?'s':''} déjà ${type==='pret'?'prêté':'sorti'}${addB.length!==1?'s':''}. La signature de départ est conservée.${type==='pret'&&state.role==='assistant'?' Les articles ajoutés devront être validés.':''}</p>
   ${checkoutPickerHtml(true)}`;
   return `
   <div class="backlink" onclick="goto('loans')">‹ Annuler</div>
@@ -3924,18 +3924,18 @@ function renderCheckout(){
       <button type="button" class="btn btn-ghost" style="width:auto;margin-top:6px;" onclick="clearSignature()">Effacer la signature</button>
     </div>
   </div>
-  ${type==='mission'?coReuseHtml():''}
+  ${coReuseHtml()}
   ${checkoutPickerHtml(false)}
   `;
 }
-function coPastMissions(){
+function coPastMissions(){ const ty=state.checkoutType;
   const m={};
-  allLoans().filter(l=>l.type==='mission' && l.status==='restitue').forEach(l=>{ const k=l.batch_id||l.id; (m[k]=m[k]||{key:k,name:l.borrower_name,date:l.checkout_date||'',ids:[]}).ids.push(l.equipment_id); });
+  allLoans().filter(l=>l.type===ty && l.status==='restitue').forEach(l=>{ const k=l.batch_id||l.id; (m[k]=m[k]||{key:k,name:l.borrower_name,date:l.checkout_date||'',ids:[]}).ids.push(l.equipment_id); });
   return Object.values(m).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,30);
 }
 function coReuseHtml(){
   const ms=coPastMissions(); if(!ms.length) return '';
-  return `<div class="card"><div class="field" style="margin:0;"><label>Reprendre le matériel d'une mission terminée</label>
+  return `<div class="card"><div class="field" style="margin:0;"><label>Reprendre le matériel ${state.checkoutType==='pret'?'d\'un prêt terminé':'d\'une mission terminée'}</label>
     <select id="co-reuse" onchange="coReuse(this.value)"><option value="">— Choisir (optionnel) —</option>${ms.map(m=>`<option value="${esc(m.key)}">${esc(m.name)} · ${fmtDate(m.date)} (${m.ids.length} article${m.ids.length!==1?'s':''})</option>`).join('')}</select>
     <p id="co-reuse-msg" class="muted" style="font-size:12px;margin-top:6px;">Présélectionne le même matériel ; tu peux ensuite l'ajuster.</p></div></div>`;
 }
@@ -4042,14 +4042,14 @@ async function saveCheckout(){
     try{
       const rows = state.checkoutSelection.map(eid=>({
         equipment_id: eid, unit_id: state.unit.id, borrower_name: f.borrower_name, checkout_date: f.checkout_date, expected_return_date: f.expected_return_date||null,
-        status:'en_cours', type:'mission', batch_id: f.batch_id||f.id, checkout_signature_url: f.checkout_signature_url||null,
+        status:(f.type==='pret'&&state.role==='assistant')?'en_attente':'en_cours', type:f.type, batch_id: f.batch_id||f.id, checkout_signature_url: f.checkout_signature_url||null,
         created_by: state.session.user.id, created_by_name: state.myDisplayName
       }));
       const { error } = await sb.from('loans').insert(rows);
       if(error) throw error;
-      await logAction('Matériel ajouté à une mission', `${f.borrower_name} — +${rows.length} article(s)`);
-      await refreshAll(); const k=state.checkoutAddTo; state.checkoutAddTo=null; state.batchDetailKey=k; state.batchDetailType='mission'; state.view='batchDetail';
-      showToast('Matériel ajouté à la mission');
+      await logAction(f.type==='pret'?'Matériel ajouté à un prêt':'Matériel ajouté à une mission', `${f.borrower_name} — +${rows.length} article(s)`);
+      await refreshAll(); const k=state.checkoutAddTo; state.checkoutAddTo=null; state.batchDetailKey=k; state.batchDetailType=f.type; state.view='batchDetail';
+      showToast(rows[0].status==='en_attente'?'Ajout enregistré — en attente de validation':(f.type==='pret'?'Matériel ajouté au prêt':'Matériel ajouté à la mission'));
     }catch(err){ showToast(err.message); }
     state.busy=false; render(); return;
   }
