@@ -3743,7 +3743,7 @@ function renderLoanBatchCard(items, type, status){
     <div style="margin-top:10px;">
       ${loanItemsGrouped(items,false)}
     </div>
-    ${status==='en_cours' && can('gererPret') ? `<button class="btn btn-secondary" style="margin-top:12px;" onclick="event.stopPropagation(); startAddToMission('${key}','${type}')">+ Ajouter du matériel</button><button class="btn btn-primary" style="margin-top:12px;" onclick="event.stopPropagation(); startBatchReturn('${key}','${type}')">${type==='pret'?'Marquer restitué':'Marquer rentré'}</button>` : ''}
+    ${status==='en_cours' && can('gererPret') ? `${type==='mission'?`<button class="btn btn-secondary" style="margin-top:12px;" onclick="event.stopPropagation(); startAddToMission('${key}','mission')">+ Ajouter du matériel</button>`:''}<button class="btn btn-primary" style="margin-top:12px;" onclick="event.stopPropagation(); startBatchReturn('${key}','${type}')">${type==='pret'?'Marquer restitué':'Marquer rentré'}</button>` : ''}
     ${status==='en_attente' && can('validerPret') ? `<div class="btn-row" style="margin-top:12px;">
       <button class="btn btn-primary" onclick="event.stopPropagation(); validateLoanBatch('${key}')">Valider</button>
       <button class="btn btn-danger" onclick="event.stopPropagation(); rejectLoanBatch('${key}')">Refuser</button>
@@ -3844,7 +3844,7 @@ function renderBatchDetailView(){
   </div>` : ''}
   <h3 style="margin-bottom:10px;">Matériel (${items.length})</h3>
   ${loanItemsGrouped(items,true)}
-  ${isCurrent && can('gererPret')?`<button class="btn btn-secondary" style="margin-top:4px;" onclick="startAddToMission('${batchKey}','${type}')">+ Ajouter du matériel</button>`:''}
+  ${isCurrent && type==='mission' && can('gererPret')?`<button class="btn btn-secondary" style="margin-top:4px;" onclick="startAddToMission('${batchKey}','mission')">+ Ajouter du matériel</button>`:''}
   ${(first.status==='restitue') ? `
   <h3 style="margin:20px 0 10px;">${type==='pret'?'Restitution':'Retour'}</h3>
   <div class="card">
@@ -3899,7 +3899,7 @@ async function confirmRefuse(){
   showToast('Prêt refusé');
 }
 function startCheckout(type){ state.checkoutType=type; state.checkoutSelection=[]; state.checkoutAddTo=null; state.view='checkout'; render(); }
-function startAddToMission(batchKey,type){ state.checkoutType=type||'mission'; state.checkoutSelection=[]; state.checkoutAddTo=batchKey; state.view='checkout'; render(); }
+function startAddToMission(batchKey){ state.checkoutType='mission'; state.checkoutSelection=[]; state.checkoutAddTo=batchKey; state.view='checkout'; render(); }
 function coAddBatch(){ if(!state.checkoutAddTo) return null; const it=allLoans().filter(l=>(l.batch_id||l.id)===state.checkoutAddTo && l.type===state.checkoutType && l.status==='en_cours'); return it.length?it:null; }
 function renderCheckout(){
   const type = state.checkoutType;
