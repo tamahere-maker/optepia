@@ -3716,6 +3716,7 @@ function renderLoansTab(){
   ${can('gererPret')?`<button class="btn btn-primary" style="margin-bottom:18px;" onclick="startCheckout('${tab}')">+ ${tab==='pret'?'Nouveau prêt':'Nouvelle sortie mission'}</button>`:''}
   ${Object.keys(pendingGroups).length>0?`<h3 style="margin-bottom:10px;color:var(--warn);">En attente de validation</h3>${Object.keys(pendingGroups).map(k=>renderLoanBatchCard(pendingGroups[k], tab, 'en_attente')).join('')}<div class="divider"></div>`:''}
   <h3 style="margin-bottom:10px;">En cours</h3>
+  ${allLoans().some(l=>l.status==='en_cours')?`<button class="btn btn-secondary" style="margin-bottom:12px;" onclick="exportLoansOut()">⬇ Exporter le matériel sorti (CSV)</button>`:''}
   ${Object.keys(currentGroups).length===0?'<p class="muted" style="margin-bottom:20px;">Rien en cours.</p>':Object.keys(currentGroups).map(k=>renderLoanBatchCard(currentGroups[k], tab, 'en_cours')).join('')}
   <div class="divider"></div>
   <h3 style="margin-bottom:10px;">Historique</h3>
@@ -3756,10 +3757,21 @@ function loanItemsGrouped(items, clickable){
   return groups.map(g=>{
     const chips=g.items.map(l=>{ const e=l._equip; const t=[e.identification?esc(e.identification):'',e.numero_serie?'S/N '+esc(e.numero_serie):''].filter(Boolean).join(' · ')||'—';
       return `<span class="chip" style="display:inline-block;font-family:var(--mono,monospace);${clickable?'cursor:pointer;':''}"${clickable?` onclick="state.detailId='${e.id}'; state.view='detail'; render();"`:''}>${t}</span>`; }).join('');
+    const ph=g.items.map(l=>l._equip).find(e=>e.photo_url);
+    const th=ph?`<img class="thumb" src="${imgSrc(ph.photo_url)}" onerror="imgFallback(this)" style="flex-shrink:0;">`:`<div class="thumb" style="flex-shrink:0;"></div>`;
+    const body=`<div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:14px;margin-bottom:6px;">${esc(g.name)} <span class="muted" style="font-weight:400;">(${g.items.length})</span></div><div style="display:flex;flex-wrap:wrap;gap:6px;">${chips}</div></div>`;
     return clickable
-      ? `<div class="card"><div style="font-weight:600;font-size:14px;margin-bottom:8px;">${esc(g.name)} <span class="muted" style="font-weight:400;">(${g.items.length})</span></div><div style="display:flex;flex-wrap:wrap;gap:6px;">${chips}</div></div>`
-      : `<div style="font-size:13px;padding:6px 0;border-top:1px solid var(--border);"><div style="font-weight:600;margin-bottom:4px;">${esc(g.name)} <span class="muted" style="font-weight:400;">(${g.items.length})</span></div><div style="display:flex;flex-wrap:wrap;gap:5px;">${chips}</div></div>`;
+      ? `<div class="card" style="display:flex;gap:12px;align-items:flex-start;">${th}${body}</div>`
+      : `<div style="font-size:13px;padding:8px 0;border-top:1px solid var(--border);display:flex;gap:12px;align-items:flex-start;">${th}${body}</div>`;
   }).join('');
+}
+function exportLoansOut(){
+  const rows=allLoans().filter(l=>l.status==='en_cours').sort((a,b)=>coCmp(a.type,b.type)||coCmp(a.borrower_name,b.borrower_name)||coCmp(a._equip.designation,b._equip.designation)||coCmp(a._equip.identification||a._equip.numero_serie,b._equip.identification||b._equip.numero_serie));
+  if(!rows.length){ showToast('Aucun matériel sorti'); return; }
+  const late=(l)=>l.expected_return_date && l.expected_return_date < new Date().toISOString().slice(0,10) ? 'Oui' : '';
+  const head=['Type','Mission / Emprunteur','Date de sortie','Retour prévu','En retard','Désignation','Marque','Identification','N° série','Famille'];
+  orgCsv([head].concat(rows.map(l=>[l.type==='pret'?'Prêt':'Mission',l.borrower_name,fmtDate(l.checkout_date),fmtDate(l.expected_return_date).replace('—',''),late(l),l._equip.designation,l._equip.marque,l._equip.identification,l._equip.numero_serie,l._equip.famille])),
+    'materiel-sorti-'+new Date().toISOString().slice(0,10)+'.csv');
 }
 function openBatchDetail(batchKey, type){ state.batchDetailKey=batchKey; state.batchDetailType=type; state.view='batchDetail'; render(); }
 function renderBatchDetailView(){
