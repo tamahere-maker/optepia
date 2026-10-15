@@ -4218,11 +4218,11 @@ function renderHome(){
     can('creerMateriel') ? `<button class="btn btn-secondary" onclick="startAddEquip()">➕ Ajouter du matériel</button>` : '',
     `<button class="btn btn-secondary" onclick="goto('export')">📥 Export</button>`
   ].filter(Boolean);
-  const tile = (n,l)=>`<div class="card" style="flex:1;min-width:0;text-align:center;padding:12px 6px;margin:0;"><div style="font-family:var(--font-head);font-size:24px;font-weight:700;">${n}</div><div class="muted" style="font-size:11px;">${l}</div></div>`;
+  const tile = (n,l,act)=>`<div class="card${act?' tap':''}" ${act?`onclick="${act}"`:''} style="flex:1;min-width:0;text-align:center;padding:12px 6px;margin:0;"><div style="font-family:var(--font-head);font-size:24px;font-weight:700;">${n}</div><div class="muted" style="font-size:11px;">${l}</div></div>`;
   return `
   <h2>Accueil</h2>
   <p class="muted" style="margin-bottom:14px;">${esc(state.unit.name)} · ${new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}</p>
-  <div style="display:flex;gap:8px;margin-bottom:16px;">${tile(d.total,'Matériel')}${tile(d.conforme,'Conformes')}${tile(d.pretsEnCours,'En prêt')}${tile(d.missions,'En mission')}</div>
+  <div style="display:flex;gap:8px;margin-bottom:16px;">${tile(d.total,'Matériel')}${tile(d.conforme,'Conformes')}${tile(d.pretsEnCours,'En prêt',"state.loanTab='pret'; goto('loans')")}${tile(d.missions,'En mission',"state.loanTab='mission'; goto('loans')")}</div>
   <h3 style="margin-bottom:10px;">À traiter</h3>
   ${rows.length===0?`<div class="card" style="border-color:var(--ok);"><b style="color:var(--ok);">✅ Tout est conforme</b><p class="muted" style="font-size:13px;margin-top:4px;">Aucun contrôle, prêt ou validation en attente de ta part.</p></div>`
     : rows.map(r=>`<div class="card tap" style="margin-bottom:8px;" onclick="${r.act}"><div class="row"><div style="display:flex;align-items:center;gap:10px;"><span style="font-family:var(--font-head);font-size:22px;font-weight:700;color:${r.col};min-width:28px;">${r.n}</span><span style="font-size:14px;">${r.ico} ${r.txt}</span></div><span class="muted">›</span></div></div>`).join('')}
