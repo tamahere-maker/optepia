@@ -3741,7 +3741,7 @@ function renderLoanBatchCard(items, type, status){
     <div style="margin-top:10px;">
       ${loanItemsGrouped(items,false)}
     </div>
-    ${status==='en_cours' && can('gererPret') ? `<button class="btn btn-primary" style="margin-top:12px;" onclick="event.stopPropagation(); startBatchReturn('${key}','${type}')">${type==='pret'?'Marquer restitué':'Marquer rentré'}</button>` : ''}
+    ${status==='en_cours' && can('gererPret') ? `${type==='mission'?`<button class="btn btn-secondary" style="margin-top:12px;" onclick="event.stopPropagation(); startAddToMission('${key}')">+ Ajouter du matériel</button>`:''}<button class="btn btn-primary" style="margin-top:12px;" onclick="event.stopPropagation(); startBatchReturn('${key}','${type}')">${type==='pret'?'Marquer restitué':'Marquer rentré'}</button>` : ''}
     ${status==='en_attente' && can('validerPret') ? `<div class="btn-row" style="margin-top:12px;">
       <button class="btn btn-primary" onclick="event.stopPropagation(); validateLoanBatch('${key}')">Valider</button>
       <button class="btn btn-danger" onclick="event.stopPropagation(); rejectLoanBatch('${key}')">Refuser</button>
@@ -3789,6 +3789,7 @@ function renderBatchDetailView(){
   </div>` : ''}
   <h3 style="margin-bottom:10px;">Matériel (${items.length})</h3>
   ${loanItemsGrouped(items,true)}
+  ${isCurrent && type==='mission' && can('gererPret')?`<button class="btn btn-secondary" style="margin-top:4px;" onclick="startAddToMission('${batchKey}')">+ Ajouter du matériel</button>`:''}
   ${(first.status==='restitue') ? `
   <h3 style="margin:20px 0 10px;">${type==='pret'?'Restitution':'Retour'}</h3>
   <div class="card">
@@ -3842,11 +3843,20 @@ async function confirmRefuse(){
   await refreshAll(); state.view='loans'; render();
   showToast('Prêt refusé');
 }
-function startCheckout(type){ state.checkoutType=type; state.checkoutSelection=[]; state.view='checkout'; render(); }
+function startCheckout(type){ state.checkoutType=type; state.checkoutSelection=[]; state.checkoutAddTo=null; state.view='checkout'; render(); }
+function startAddToMission(batchKey){ state.checkoutType='mission'; state.checkoutSelection=[]; state.checkoutAddTo=batchKey; state.view='checkout'; render(); }
+function coAddBatch(){ if(!state.checkoutAddTo) return null; const it=allLoans().filter(l=>(l.batch_id||l.id)===state.checkoutAddTo && l.type==='mission' && l.status==='en_cours'); return it.length?it:null; }
 function renderCheckout(){
   const type = state.checkoutType;
   const available = state.equipment.filter(e=>!(e.loans||[]).some(l=>l.status==='en_cours'||l.status==='en_attente')).slice().sort((a,b)=>(a.designation||'').localeCompare(b.designation||''));
   const n = state.checkoutSelection.length;
+  const addB = coAddBatch();
+  if(state.checkoutAddTo && !addB) state.checkoutAddTo=null;
+  if(addB) return `
+  <div class="backlink" onclick="openBatchDetail('${state.checkoutAddTo}','mission')">‹ Annuler</div>
+  <h2>Ajouter du matériel</h2>
+  <p class="muted" style="margin-bottom:16px;">Mission : ${esc(addB[0].borrower_name)} — ${addB.length} article${addB.length!==1?'s':''} déjà sorti${addB.length!==1?'s':''}. La signature de départ est conservée.</p>
+  ${checkoutPickerHtml(true)}`;
   return `
   <div class="backlink" onclick="goto('loans')">‹ Annuler</div>
   <h2>${type==='pret'?'Nouveau prêt':'Nouvelle sortie mission'}</h2>
@@ -3859,6 +3869,13 @@ function renderCheckout(){
       <button type="button" class="btn btn-ghost" style="width:auto;margin-top:6px;" onclick="clearSignature()">Effacer la signature</button>
     </div>
   </div>
+  ${checkoutPickerHtml(false)}
+  `;
+}
+function checkoutPickerHtml(adding){
+  const available = coAvailable();
+  const n = state.checkoutSelection.length;
+  return `
   <h3 id="co-count-header" style="margin-bottom:10px;">Sélectionner le matériel (${n} sélectionné${n!==1?'s':''})</h3>
   ${available.length>6?`<div class="field"><input id="co-search" type="search" placeholder="Rechercher (désignation, marque, n° série, identification)…" oninput="filterCheckoutList(this.value)"></div>`:''}
   ${available.length>1?`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
@@ -3866,7 +3883,7 @@ function renderCheckout(){
     <select id="co-sort" style="width:auto;padding:7px 10px;font-size:12px;" onchange="setCheckoutView('sort',this.value)"><option value="az" ${coPref('coSort','az')==='az'?'selected':''}>Trier : A → Z</option><option value="za" ${coPref('coSort','az')==='za'?'selected':''}>Trier : Z → A</option></select>
   </div>`:''}
   <div id="co-list">${available.length===0?'<p class="muted">Aucun matériel disponible (tout est déjà prêté/sorti).</p>':checkoutListHtml(available)}</div>
-  <button id="co-submit-btn" class="btn btn-primary" style="margin:16px 0 48px;" ${state.busy?'disabled':''} onclick="saveCheckout()">${state.busy?'<span class="spinner"></span>':'Confirmer ('+n+' article'+(n!==1?'s':'')+')'}</button>
+  <button id="co-submit-btn" class="btn btn-primary" style="margin:16px 0 48px;" ${state.busy?'disabled':''} onclick="saveCheckout()">${state.busy?'<span class="spinner"></span>':''+(adding?'Ajouter':'Confirmer')+' ('+n+' article'+(n!==1?'s':'')+')'}</button>
   `;
 }
 function coPref(k,def){ if(state[k]!==undefined) return state[k]; try{ const v=localStorage.getItem('optepia_'+k); if(v!==null){ state[k]=(typeof def==='boolean')?v==='1':v; return state[k]; } }catch(e){} state[k]=def; return def; }
@@ -3935,9 +3952,27 @@ function onCheckoutCheckboxChange(id, checked){
   const header = document.getElementById('co-count-header');
   if(header) header.textContent = `Sélectionner le matériel (${n} sélectionné${n!==1?'s':''})`;
   const btn = document.getElementById('co-submit-btn');
-  if(btn && !state.busy) btn.textContent = `Confirmer (${n} article${n!==1?'s':''})`;
+  if(btn && !state.busy) btn.textContent = `${state.checkoutAddTo?'Ajouter':'Confirmer'} (${n} article${n!==1?'s':''})`;
 }
 async function saveCheckout(){
+  const addB = coAddBatch();
+  if(addB){
+    if(state.checkoutSelection.length===0){ showToast('Sélectionne au moins un article'); return; }
+    const f=addB[0]; state.busy=true; render();
+    try{
+      const rows = state.checkoutSelection.map(eid=>({
+        equipment_id: eid, unit_id: state.unit.id, borrower_name: f.borrower_name, checkout_date: f.checkout_date, expected_return_date: f.expected_return_date||null,
+        status:'en_cours', type:'mission', batch_id: f.batch_id||f.id, checkout_signature_url: f.checkout_signature_url||null,
+        created_by: state.session.user.id, created_by_name: state.myDisplayName
+      }));
+      const { error } = await sb.from('loans').insert(rows);
+      if(error) throw error;
+      await logAction('Matériel ajouté à une mission', `${f.borrower_name} — +${rows.length} article(s)`);
+      await refreshAll(); const k=state.checkoutAddTo; state.checkoutAddTo=null; state.batchDetailKey=k; state.batchDetailType='mission'; state.view='batchDetail';
+      showToast('Matériel ajouté à la mission');
+    }catch(err){ showToast(err.message); }
+    state.busy=false; render(); return;
+  }
   const name = document.getElementById('co-name').value.trim();
   const date = document.getElementById('co-date').value;
   const expectedEl = document.getElementById('co-expected');
