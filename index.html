@@ -453,6 +453,7 @@ async function selectMembership(m){
   state.unit = m.units; state.role = m.role; state.myMemberId = m.id; state.myDisplayName = m.display_name; state.activeMembershipId = m.id; state.myAvatarUrl = m.avatar_url || null;
   state.unitOrgs = null; loadUnitOrgs();
   state.billing = null; loadBilling();
+  syncAvatarAcrossUnits();
   await Promise.all([loadAccess(), refreshAll()]);
   state.view='home';
   render();
@@ -2717,12 +2718,46 @@ async function disableMfa(factorId){
   render();
   showToast('Double authentification désactivée');
 }
+/* Photo de profil commune à toutes mes unités : la même image est copiée dans le dossier de chaque unité dont je suis membre */
+async function setAvatarEverywhere(dataUrlOrBlob){
+  const ms = (state.memberships||[]).filter(m=>m.id && m.unit_id);
+  if(!ms.some(m=>m.id===state.myMemberId)) ms.push({id:state.myMemberId, unit_id:state.unit.id});
+  const blob = typeof dataUrlOrBlob==='string' ? dataUrlToBlob(dataUrlOrBlob) : dataUrlOrBlob;
+  const res = await Promise.allSettled(ms.map(async m=>{
+    const path = `${m.unit_id}/avatars/${m.id}.jpg`;
+    const { error:e1 } = await sb.storage.from(BUCKET).upload(path, blob, {upsert:true, contentType:blob.type||'image/jpeg'});
+    if(e1) throw e1;
+    const { error:e2 } = await sb.from('unit_members').update({avatar_url:path}).eq('id', m.id);
+    if(e2) throw e2;
+    m.avatar_url = path; delete signedUrlCache[path];
+    return path;
+  }));
+  const mine = `${state.unit.id}/avatars/${state.myMemberId}.jpg`;
+  const ok = res.some((r,i)=>r.status==='fulfilled' && ms[i].id===state.myMemberId);
+  if(!ok) throw (res.find(r=>r.status==='rejected')||{}).reason || new Error('Échec de la mise à jour');
+  return mine;
+}
+/* Au changement d'unité : reprendre ma photo dans les unités où je n'en ai pas encore (une seule fois par session) */
+let avatarSynced = false;
+async function syncAvatarAcrossUnits(){
+  if(avatarSynced) return; avatarSynced = true;
+  try{
+    const ms = state.memberships||[]; const src = ms.find(m=>m.avatar_url) ; if(!src) return;
+    const missing = ms.filter(m=>!m.avatar_url && m.id && m.unit_id); if(!missing.length) return;
+    const { data:blob, error } = await sb.storage.from(BUCKET).download(src.avatar_url); if(error||!blob) return;
+    for(const m of missing){
+      const path = `${m.unit_id}/avatars/${m.id}.jpg`;
+      const { error:e1 } = await sb.storage.from(BUCKET).upload(path, blob, {upsert:true, contentType:blob.type||'image/jpeg'}); if(e1) continue;
+      const { error:e2 } = await sb.from('unit_members').update({avatar_url:path}).eq('id', m.id); if(e2) continue;
+      m.avatar_url = path;
+      if(m.id===state.myMemberId){ state.myAvatarUrl = path; await refreshAll(); await resolveSignedUrls([path]); render(); }
+    }
+  }catch(e){}
+}
 function pickAvatarPhoto(){
   pickCropPhoto(async (resized)=>{
     try{
-      const url = await uploadImage(resized, `${state.unit.id}/avatars/${state.myMemberId}.jpg`);
-      const { error } = await sb.from('unit_members').update({avatar_url:url}).eq('id', state.myMemberId);
-      if(error) throw error;
+      const url = await setAvatarEverywhere(resized);
       state.myAvatarUrl = url;
       delete signedUrlCache[url];
       await refreshAll(); await resolveSignedUrls([url]); render();
