@@ -12,3 +12,6 @@
 
 /accueil.html
   Cache-Control: no-cache, must-revalidate
+
+/logo-*.png
+  Cache-Control: no-cache, must-revalidate
