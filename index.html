@@ -374,6 +374,8 @@ function statusOf(e){
   if(isReformed(e)) return {label:'Réformé', cls:'badge-danger'};
   const dfv = daysUntil(e.date_fin_vie);
   if(dfv!==null && dfv<0) return {label:'Hors service', cls:'badge-danger'};
+  /* matériel non EPI : contrôle facultatif, jamais « à contrôler » */
+  if(e.non_epi){ if(dfv!==null && dfv<60) return {label:'Fin de vie proche', cls:'badge-warn'}; return {label:'Non EPI', cls:'badge-ok'}; }
   const controls = e.controls||[];
   const last = controls.length ? controls.slice().sort((a,b)=>b.date.localeCompare(a.date))[0] : null;
   if(last){
@@ -1228,6 +1230,7 @@ const EQUIP_FIELD_MAP = {
   'f-famille':'famille','f-sousFamille':'sous_famille','f-taille':'taille','f-ficheTechnique':'fiche_technique_url'
 };
 function syncEquipDraftFromDom(){
+  { const ne=document.getElementById('f-nonEpi'); if(ne) equipDraft.non_epi = ne.checked; }
   Object.keys(EQUIP_FIELD_MAP).forEach(id=>{
     const el=document.getElementById(id); if(!el) return;
     if(id==='f-ficheTechnique'){
@@ -1247,7 +1250,7 @@ function syncControlDraftFromDom(){
 /* ---------- Drafts ---------- */
 let equipDraft = {}; let controlDraft = {};
 let sigCanvas=null, sigCtx=null, sigDrawing=false, sigEmpty=true;
-function newEquipDraft(){ equipDraft = {designation:'',marque:'',date_fabrication:'',date_premiere_utilisation:'',numero_serie:'',identification:'',date_fin_vie:'',famille:'',sous_famille:'',taille:'',fiche_technique_url:'',photo:null,photo_url:null}; }
+function newEquipDraft(){ equipDraft = {designation:'',marque:'',date_fabrication:'',date_premiere_utilisation:'',numero_serie:'',identification:'',date_fin_vie:'',famille:'',sous_famille:'',taille:'',fiche_technique_url:'',non_epi:false,photo:null,photo_url:null}; }
 function newControlDraft(){ controlDraft = {date:new Date().toISOString().slice(0,10), verificateur:state.myDisplayName, observations:'', photo:null, statut:'conforme'}; }
 
 /* ---------- Render ---------- */
@@ -1530,6 +1533,7 @@ function equipCounts(){
 }
 function groupKey(e){ return [e.famille||'Sans famille', e.sous_famille||'', e.designation||'', e.marque||''].join('¦'); }
 function nextControlDueDays(e){
+  if(e.non_epi) return 999999;
   const controls = e.controls||[];
   const last = controls.length? controls.slice().sort((a,b)=>b.date.localeCompare(a.date))[0] : null;
   if(!last) return -999999;
@@ -1543,7 +1547,8 @@ function dueParts(e){
   if(isReformed(e)) return [];
   const out=[]; const last=lastCtl(e); const dfv=daysUntil(e.date_fin_vie);
   if(dfv!==null && dfv<0){ out.push({t:'Fin de vie dépassée',c:'var(--danger)'}); return out; }
-  if(!last) out.push({t:'Jamais contrôlé',c:'var(--warn)'});
+  if(e.non_epi) out.push({t: last?'Non EPI · dernier contrôle '+fmtDate(last.date):'Non EPI · contrôle facultatif', c:'var(--text-muted)'});
+  else if(!last) out.push({t:'Jamais contrôlé',c:'var(--warn)'});
   else {
     const nx=addYears(last.date,1), d=daysUntil(nx);
     if(d<0) out.push({t:'Contrôle dépassé de '+(-d)+' j',c:'var(--danger)'});
@@ -1556,7 +1561,7 @@ function dueParts(e){
 }
 function dueHtml(e){ return dueParts(e).map(p=>`<div style="font-size:12px;margin-top:2px;color:${p.c};">${esc(p.t)}</div>`).join(''); }
 const SORTS = [['designation','Tri : désignation'],['urgence','Tri : urgence'],['controle','Tri : prochain contrôle'],['finvie','Tri : fin de vie'],['recent','Tri : ajouté récemment']];
-const STATUS_FILTERS = [['tous','Statut : tous'],['conforme','Conforme'],['attention','À surveiller'],['acontroler','À contrôler (dépassé, < 30 j, jamais)'],['horsService','Hors service / réformé'],['depasse','Contrôle dépassé'],['proche','Contrôle à faire < 30 j'],['jamais','Jamais contrôlé'],['finvie','Fin de vie < 60 j']];
+const STATUS_FILTERS = [['tous','Statut : tous'],['conforme','Conforme'],['attention','À surveiller'],['acontroler','À contrôler (dépassé, < 30 j, jamais)'],['nonepi','Non EPI (contrôle facultatif)'],['horsService','Hors service / réformé'],['depasse','Contrôle dépassé'],['proche','Contrôle à faire < 30 j'],['jamais','Jamais contrôlé'],['finvie','Fin de vie < 60 j']];
 function renderList(){
   const c = equipCounts();
   const pendingLoanCount = can('validerPret') ? Object.keys(groupLoansByBatch(allLoans().filter(l=>l.status==='en_attente'))).length : 0;
@@ -1615,6 +1620,7 @@ function listItems(){
     if(state.filter==='attention') return statusOf(e).cls==='badge-warn';
     if(state.filter==='horsService') return statusOf(e).cls==='badge-danger';
     if(state.filter==='acontroler') return needsCheck(e);
+    if(state.filter==='nonepi') return !!e.non_epi;
     if(state.filter==='depasse') return lbl==='Contrôle dépassé';
     if(state.filter==='jamais') return lbl==='Jamais contrôlé';
     if(state.filter==='proche') return lbl==='Contrôle proche';
@@ -1656,7 +1662,7 @@ function renderListResults(){
       const chk = g.filter(needsCheck), over = g.filter(e=>statusOf(e).label==='Contrôle dépassé').length;
       let due;
       if(chk.length) due = `<div style="font-size:12px;margin-top:2px;color:${over?'var(--danger)':'var(--warn)'};">${chk.length} à contrôler${over?' · '+over+' dépassé'+(over>1?'s':''):''}</div>`;
-      else { const nx = g.map(e=>{ const l=lastCtl(e); return l?addYears(l.date,1):null; }).filter(Boolean).sort()[0]; due = nx?`<div style="font-size:12px;margin-top:2px;color:var(--text-muted);">Prochain contrôle ${fmtDate(nx)}</div>`:''; }
+      else { const nx = g.filter(e=>!e.non_epi).map(e=>{ const l=lastCtl(e); return l?addYears(l.date,1):null; }).filter(Boolean).sort()[0]; due = nx?`<div style="font-size:12px;margin-top:2px;color:var(--text-muted);">Prochain contrôle ${fmtDate(nx)}</div>`:''; }
       const eol = g.filter(e=>{ const d=daysUntil(e.date_fin_vie); return isEligibleControl(e) && d!==null && d>=0 && d<60; }).length;
       if(eol) due += `<div style="font-size:12px;margin-top:2px;color:var(--warn);">${eol} fin de vie proche</div>`;
       return `
@@ -1692,7 +1698,7 @@ function renderEquipTable(items){
   const t=state.tableSort, arrow=k=>t.k===k?(t.dir>0?' ▲':' ▼'):'';
   return `<div class="tbl-wrap"><table class="eqt"><thead><tr>${state.selMode?`<th style="width:30px;"><input type="checkbox" class="ck" onchange="selAllVisible(this.checked)" ${items.length&&items.every(e=>state.sel[e.id])?'checked':''}></th>`:''}${cols.map(c=>`<th onclick="tableSortBy('${c[0]}')">${c[1]}${arrow(c[0])}</th>`).join('')}</tr></thead><tbody>
   ${items.map(e=>{ const s=statusOf(e), l=lastCtl(e), nx=l?addYears(l.date,1):null, d=nx?daysUntil(nx):null, dfv=daysUntil(e.date_fin_vie);
-    const nc = !l?'<span style="color:var(--warn);">Jamais</span>':`<span style="color:${d<0?'var(--danger)':d<30?'var(--warn)':'inherit'};">${fmtDate(nx)}</span>`;
+    const nc = e.non_epi?'<span class="muted">Facultatif</span>':!l?'<span style="color:var(--warn);">Jamais</span>':`<span style="color:${d<0?'var(--danger)':d<30?'var(--warn)':'inherit'};">${fmtDate(nx)}</span>`;
     return `<tr class="${state.sel[e.id]?'sel':''}" onclick="${state.selMode?`toggleSel('${e.id}')`:`openDetail('${e.id}')`}">${state.selMode?`<td><input type="checkbox" class="ck" ${state.sel[e.id]?'checked':''} onclick="event.stopPropagation();toggleSel('${e.id}')"></td>`:''}
     <td><b>${esc(e.designation)||'Sans désignation'}</b>${e.marque?` <span class="muted">· ${esc(e.marque)}</span>`:''}${e.taille?` <span class="muted">· ${esc(e.taille)}</span>`:''}</td>
     <td class="mono">${esc(e.numero_serie)||'—'}</td><td class="mono">${esc(e.identification)||'—'}</td>
@@ -1787,6 +1793,7 @@ function renderDetail(){
       </div>
     </div>
     ${reformBanner(e)}
+    ${e.non_epi?'<div class="qr-status info" style="margin:10px 0;"><b>Matériel non EPI</b><br><span style="font-size:12px;">Le contrôle est facultatif : il n\'est jamais signalé « à contrôler », mais tu peux en enregistrer un à tout moment.</span></div>':''}
     <div class="divider"></div>
     ${(e.famille||e.sous_famille)?`<div class="row"><div class="field" style="flex:1;"><label>Famille</label><p>${esc(e.famille)||'—'}</p></div><div class="field" style="flex:1;"><label>Sous-famille</label><p>${esc(e.sous_famille)||'—'}</p></div></div>`:''}
     ${e.taille?`<div class="field"><label>Taille</label><p>${esc(e.taille)}</p></div>`:''}
@@ -1910,6 +1917,10 @@ function renderAddEquip(){
       </div>
     </div>
     <div class="field"><label>Identification</label><input id="f-identification" class="mono" value="${esc(equipDraft.identification)}"></div>
+    <label style="display:flex;gap:12px;align-items:flex-start;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;margin:4px 0 16px;cursor:pointer;">
+      <input type="checkbox" id="f-nonEpi" ${equipDraft.non_epi?'checked':''} style="width:20px;height:20px;margin-top:2px;flex-shrink:0;">
+      <span><b>Ce matériel n'est pas un EPI</b><br><span class="muted" style="font-size:12px;">Le contrôle est alors facultatif : il n'apparaît jamais « à contrôler », mais tu peux en enregistrer un quand tu veux.</span></span>
+    </label>
     <div class="field"><label>Date de fabrication</label><input id="f-dateFabrication" type="date" value="${equipDraft.date_fabrication||''}"></div>
     <div class="field"><label>Date de 1ère utilisation</label><input id="f-datePremiereUtilisation" type="date" value="${equipDraft.date_premiere_utilisation||''}"></div>
     <div class="field"><label>Date de fin de vie</label><input id="f-dateFinVie" type="date" value="${equipDraft.date_fin_vie||''}"></div>
@@ -2956,7 +2967,7 @@ function inspNm(n){ return state.insp.hideNames ? '—' : (n||'—'); }
 function ctlLabel(s){ return s==='conforme'?'Conforme':s==='reserve'?'Conforme avec réserve':s==='reforme'?'Réformé':(s||'—'); }
 function lastCtl(e){ const cs=(e.controls||[]).slice().sort((a,b)=>b.date.localeCompare(a.date)); return cs[0]||null; }
 function ctlColor(s){ return s==='conforme'?'#1a8f5f':s==='reserve'?'#b97800':'#c4243a'; }
-function stColor(l){ return l==='Conforme'?'#1a8f5f':(l==='Contrôle proche'||l==='Fin de vie proche'||l==='Jamais contrôlé')?'#b97800':'#c4243a'; }
+function stColor(l){ return (l==='Conforme'||l==='Non EPI')?'#1a8f5f':(l==='Contrôle proche'||l==='Fin de vie proche'||l==='Jamais contrôlé')?'#b97800':'#c4243a'; }
 function renderInspectionDoc(){
   const I = state.insp;
   if(!I || !I.generatedAt) return `<div class="backlink" onclick="openInspection()">‹ Retour</div><div class="empty">Dossier non généré.</div>`;
@@ -2970,7 +2981,7 @@ function renderInspectionDoc(){
   const inService = eq.filter(e=>!isReformed(e));
   const cnt = {}; inService.forEach(e=>{ const l=statusOf(e).label; cnt[l]=(cnt[l]||0)+1; });
   const reserve = inService.filter(e=>{ const c=lastCtl(e); return c && c.statut==='reserve'; }).length;
-  const aJour = inService.filter(e=>['Conforme','Contrôle proche','Fin de vie proche'].includes(statusOf(e).label)).length;
+  const aJour = inService.filter(e=>['Conforme','Non EPI','Contrôle proche','Fin de vie proche'].includes(statusOf(e).label)).length;
   const taux = inService.length ? Math.round(100*aJour/inService.length) : null;
   const allCtl = []; eq.forEach(e=>(e.controls||[]).forEach(c=>allCtl.push({c,e})));
   allCtl.sort((a,b)=>b.c.date.localeCompare(a.c.date));
@@ -3000,7 +3011,7 @@ function renderInspectionDoc(){
 
   if(B.synth){
     const lines = [['Fiches actives (hors corbeille)', eq.length],['Matériel en service (hors réformé)', inService.length],
-      ['Réformé (rebut)', reformed.length],['Conforme', cnt['Conforme']||0],['Contrôle à faire sous 30 jours', cnt['Contrôle proche']||0],
+      ['Réformé (rebut)', reformed.length],['Conforme', cnt['Conforme']||0],['Non EPI (contrôle facultatif)', cnt['Non EPI']||0],['Contrôle à faire sous 30 jours', cnt['Contrôle proche']||0],
       ['Fin de vie proche (< 60 jours)', cnt['Fin de vie proche']||0],['Contrôle dépassé', cnt['Contrôle dépassé']||0],['Jamais contrôlé', cnt['Jamais contrôlé']||0],
       ['Hors service (fin de vie dépassée)', cnt['Hors service']||0],['Dont dernier contrôle « conforme avec réserve »', reserve]];
     sections.push(`<div class="isec${pb()}">${H('Synthèse')}
@@ -3017,9 +3028,9 @@ function renderInspectionDoc(){
     sections.push(`<div class="isec${pb()}">${H('Registre du matériel')}${Object.keys(fams).length===0?none('Aucun matériel.'):Object.keys(fams).sort().map(f=>`
       <h3 class="ih3">${esc(f)} (${fams[f].length})</h3>
       <table class="it"><thead><tr><th>Désignation</th><th>Identification</th><th>Fabrication</th><th>Fin de vie</th><th>Dernier contrôle</th><th>Prochaine échéance</th><th style="width:120px;">Signature du dernier contrôle</th></tr></thead><tbody>
-      ${fams[f].map(e=>{ const c=lastCtl(e); const ech=c&&!isReformed(e)?addYears(c.date,1):null; const dn=ech?daysUntil(ech):null;
+      ${fams[f].map(e=>{ const c=lastCtl(e); const ech=c&&!isReformed(e)&&!e.non_epi?addYears(c.date,1):null; const dn=ech?daysUntil(ech):null;
         return `<tr><td>${nameOf(e)}</td><td>${idStr(e)}</td><td>${fmtDate(e.date_fabrication)}</td><td>${fmtDate(e.date_fin_vie)}</td>
-        <td>${c?`<b style="color:${ctlColor(c.statut)};">${esc(ctlLabel(c.statut))}</b><br>${fmtDate(c.date)}<br><span style="color:#666;">${nm(c.verificateur_name)}</span>`:'<b style="color:#c4243a;">Jamais contrôlé</b>'}</td>
+        <td>${c?`<b style="color:${ctlColor(c.statut)};">${esc(ctlLabel(c.statut))}</b><br>${fmtDate(c.date)}<br><span style="color:#666;">${nm(c.verificateur_name)}</span>`:(e.non_epi?'<span style="color:#666;">Non EPI — contrôle facultatif</span>':'<b style="color:#c4243a;">Jamais contrôlé</b>')}</td>
         <td>${ech?`<span style="color:${dn<0?'#c4243a':dn<30?'#b97800':'#111'};${dn<0?'font-weight:700;':''}">${fmtDate(ech)}${dn<0?'<br>dépassée':''}</span>`:'—'}</td>
         <td>${c&&I.signatures&&!I.hideNames?(sigImg(c.signature_url)||'<span style="color:#999;">—</span>'):'<span style="color:#999;">—</span>'}</td></tr>`; }).join('')}</tbody></table>`).join('')}</div>`);
   }
@@ -3379,7 +3390,7 @@ function openDetail(id){ state.detailId=id; state.view='detail'; render(); }
 function startAddEquip(){ newEquipDraft(); state.qrStatus=null; _catP=null; loadCatalogOnce(); state.view='addEquip'; render(); }
 function editEquip(id){
   const e = state.equipment.find(x=>x.id===id);
-  equipDraft = {designation:e.designation,marque:e.marque,numero_serie:e.numero_serie,identification:e.identification,date_fabrication:e.date_fabrication,date_premiere_utilisation:e.date_premiere_utilisation,date_fin_vie:e.date_fin_vie,famille:e.famille,sous_famille:e.sous_famille,taille:e.taille||'',fiche_technique_url:e.fiche_technique_url,photo:null,photo_url:e.photo_url,_editId:id};
+  equipDraft = {designation:e.designation,marque:e.marque,numero_serie:e.numero_serie,identification:e.identification,date_fabrication:e.date_fabrication,date_premiere_utilisation:e.date_premiere_utilisation,date_fin_vie:e.date_fin_vie,famille:e.famille,sous_famille:e.sous_famille,taille:e.taille||'',fiche_technique_url:e.fiche_technique_url,non_epi:!!e.non_epi,photo:null,photo_url:e.photo_url,_editId:id};
   _catP=null; loadCatalogOnce(); state.view='addEquip'; render();
 }
 function cancelAddEquip(){ state.view = equipDraft._editId ? 'detail' : 'list'; render(); }
@@ -3689,7 +3700,7 @@ function duplicateEquip(id){
   const e = state.equipment.find(x=>x.id===id);
   equipDraft = {designation:e.designation,marque:e.marque,famille:e.famille,sous_famille:e.sous_famille,taille:e.taille||'',numero_serie:'',identification:'',
     date_fabrication:e.date_fabrication,date_premiere_utilisation:e.date_premiere_utilisation,date_fin_vie:e.date_fin_vie,
-    fiche_technique_url:e.fiche_technique_url,photo:null,photo_url:e.photo_url,_duplicateNote:e.designation};
+    fiche_technique_url:e.fiche_technique_url,non_epi:!!e.non_epi,photo:null,photo_url:e.photo_url,_duplicateNote:e.designation};
   state.view='addEquip'; render();
 }
 async function saveEquip(){
@@ -3698,6 +3709,7 @@ async function saveEquip(){
     designation:get('f-designation'), marque:get('f-marque'), numero_serie:get('f-numeroSerie'), identification:get('f-identification'),
     date_fabrication:get('f-dateFabrication')||null, date_premiere_utilisation:get('f-datePremiereUtilisation')||null, date_fin_vie:get('f-dateFinVie')||null,
     famille:get('f-famille')||null, sous_famille:get('f-sousFamille')||null, taille:get('f-taille')||null,
+    non_epi: !!document.getElementById('f-nonEpi').checked,
     fiche_technique_url: get('f-ficheTechnique').trim() || (equipDraft.fiche_technique_url && !isExternalLink(equipDraft.fiche_technique_url) ? equipDraft.fiche_technique_url : null)
   };
   if(!fields.designation){ showToast('La désignation est obligatoire'); return; }
@@ -4277,7 +4289,7 @@ function dashData(){
     const lbl = statusOf(e).label, dfv = daysUntil(e.date_fin_vie);
     if(lbl==='Hors service' || lbl==='Réformé') d.hs++;
     else {
-      if(lbl==='Contrôle dépassé') d.depasse++; else if(lbl==='Jamais contrôlé') d.jamais++; else if(lbl==='Contrôle proche') d.proche++; else if(lbl==='Conforme') d.conforme++;
+      if(lbl==='Contrôle dépassé') d.depasse++; else if(lbl==='Jamais contrôlé') d.jamais++; else if(lbl==='Contrôle proche') d.proche++; else if(lbl==='Conforme' || lbl==='Non EPI') d.conforme++;
       if(dfv!==null && dfv>=0 && dfv<60) d.finvie++;
     }
   });
