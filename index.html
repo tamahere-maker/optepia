@@ -528,6 +528,11 @@ async function refreshAll(){
   state.equipment = eqRes.data || [];
   state.members = (memRes.data||[]).sort((a,b)=>a.display_name.localeCompare(b.display_name));
   state.changeRequests = crRes.data || [];
+  state.memberEmails = {};
+  if(state.role==='administrateur'){
+    try{ const { data:em, error:eme } = await sb.rpc('unit_member_emails', {p_unit_id: state.unit.id});
+      if(!eme) (em||[]).forEach(r=>{ state.memberEmails[r.user_id]=r.email; }); }catch(e){}
+  }
   collectAndResolveUnitFiles().then(()=>{
     const formViews = ['addControl','addEquip','checkout','loanOut','loanReturn','batchReturn'];
     if(!formViews.includes(state.view)) render();
@@ -2152,6 +2157,7 @@ function renderProfile(){
           <div>
             <div style="font-weight:600;">${esc(m.display_name)}${m.id===state.myMemberId?' <span class="muted" style="font-weight:400;">(toi)</span>':''}</div>
             <div class="muted" style="font-size:12px;">${esc(ROLES[m.role].label)}${m.user_id===state.unit.owner_id?' · <span style="color:var(--accent);">Propriétaire</span>':''}</div>
+            ${state.role==='administrateur' && state.memberEmails && state.memberEmails[m.user_id] ? `<div class="muted" style="font-size:12px;word-break:break-all;"><a href="mailto:${esc(state.memberEmails[m.user_id])}" style="color:inherit;">✉️ ${esc(state.memberEmails[m.user_id])}</a></div>`:''}
           </div>
         </div>
         ${can('gererMembres') && m.id!==state.myMemberId ? `
