@@ -357,7 +357,9 @@ function nameCheck(first,last){
   if((f.match(/\p{L}/gu)||[]).length<2 || (l.match(/\p{L}/gu)||[]).length<2) return 'Le prénom et le nom doivent comporter au moins 2 lettres';
   return '';
 }
-function splitName(display){ const t=(display||'').trim().split(/\s+/).filter(Boolean); if(t.length<2) return {first:'',last:t[0]||''}; return {first:t.slice(0,-1).join(' '), last:t[t.length-1]}; }
+function splitName(display){ const t=(display||'').trim().split(/\s+/).filter(Boolean); if(t.length<2) return {first:'',last:t[0]||''};
+  let k=t.length; while(k>1 && t[k-1]===t[k-1].toUpperCase() && /\p{L}/u.test(t[k-1])) k--; if(k===t.length) k=t.length-1;
+  return {first:t.slice(0,k).join(' '), last:t.slice(k).join(' ')}; }
 function nameFields(idF,idL,first,last){
   return `<div class="row" style="gap:10px;"><div class="field" style="flex:1;"><label>Prénom</label><input id="${idF}" autocomplete="given-name" value="${esc(first||'')}" placeholder="Jean"></div>
     <div class="field" style="flex:1;"><label>Nom</label><input id="${idL}" autocomplete="family-name" value="${esc(last||'')}" placeholder="DUPONT"></div></div>
