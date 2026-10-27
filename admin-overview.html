@@ -80,6 +80,9 @@
   .navwrap .tab{flex:1 1 0;min-width:0;text-align:center;padding:7px 2px 8px;font-size:11px;line-height:1.15;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;}
   .tab .ic{width:18px;height:18px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
     .navwrap .tab.active{font-weight:600;}
+  .navwrap .tab{position:relative;padding:11px 2px;}
+  .navwrap .tab .ic{width:22px;height:22px;}
+  .tab .tb{position:absolute;top:3px;left:calc(50% + 6px);min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--danger);color:#fff;font:700 10px/16px var(--font-body);font-style:normal;text-align:center;}
 @media(max-width:420px){.navwrap{padding:8px 6px;}.navwrap .tabs{gap:2px;padding:3px;}.navwrap .tab{font-size:9.5px;letter-spacing:-.1px;}}
   .sel{background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:8px 10px;font-size:13px;font-family:var(--font-body);}
   .linkbtn{background:none;color:var(--accent);font-size:12px;font-weight:600;padding:4px 0;}
@@ -666,8 +669,10 @@ function renderNav(){
     orgs:'<path d="M3 21h18M5 21V10.5M9.7 21V10.5M14.3 21V10.5M19 21V10.5M2.5 10l9.5-6 9.5 6z"/>',
     log:'<path d="M8.5 6h12M8.5 12h12M8.5 18h12"/><path d="M3.8 6h.01M3.8 12h.01M3.8 18h.01"/>'
   };
-  const t = (k,l)=>`<button class="tab ${cur===k?'active':''}" onclick="setView('${k}')"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${IC[k]}</svg><span>${l}</span></button>`;
-  return `<div class="navwrap"><div class="tabs">${t('units','Unités')}${t('backups','Sauvegardes')}${t('catalog','Catalogue')}${t('support','Support'+supCountLabel())}${t('orgs','Groupements')}${t('log','Journal admin')}</div></div>`;
+  /* icônes seules : le libellé reste en title / aria-label ; le support affiche son nombre de tickets ouverts en pastille */
+  const t = (k,l,badge)=>`<button class="tab ${cur===k?'active':''}" onclick="setView('${k}')" title="${l}" aria-label="${l}"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${IC[k]}</svg>${badge?`<i class="tb">${badge}</i>`:''}</button>`;
+  const nOpen=(state.supTickets||[]).filter(x=>x.status==='open').length;
+  return `<div class="navwrap"><div class="tabs">${t('units','Unités')}${t('backups','Sauvegardes')}${t('catalog','Catalogue')}${t('support','Support',nOpen)}${t('orgs','Groupements')}${t('log','Journal admin')}</div></div>`;
 }
 function renderView(){
   if(state.view==='unitDetail') return renderUnitDetail();
