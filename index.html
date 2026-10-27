@@ -342,6 +342,32 @@ function imgFallback(imgEl){
   imgEl.replaceWith(div);
 }
 function initials(name){ return (name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase(); }
+/* ---- Nom complet obligatoire : Prénom + Nom ---- */
+const NAME_PART_RE = /^\p{L}[\p{L}'’\- ]*$/u;
+function isFullName(display){
+  const t=(display||'').trim().split(/\s+/).filter(Boolean);
+  return t.length>=2 && t.every(w=>(w.match(/\p{L}/gu)||[]).length>=2);
+}
+function capWords(x){ return x.trim().toLowerCase().replace(/(^|[\s\-'’])(\p{L})/gu,(m,a,b)=>a+b.toUpperCase()).replace(/\s+/g,' '); }
+function composeName(first,last){ return capWords(first)+' '+last.trim().replace(/\s+/g,' ').toUpperCase(); }
+function nameCheck(first,last){
+  const f=(first||'').trim(), l=(last||'').trim();
+  if(!f || !l) return 'Prénom et nom sont obligatoires';
+  if(!NAME_PART_RE.test(f) || !NAME_PART_RE.test(l)) return 'Le prénom et le nom ne doivent contenir que des lettres';
+  if((f.match(/\p{L}/gu)||[]).length<2 || (l.match(/\p{L}/gu)||[]).length<2) return 'Le prénom et le nom doivent comporter au moins 2 lettres';
+  return '';
+}
+function splitName(display){ const t=(display||'').trim().split(/\s+/).filter(Boolean); if(t.length<2) return {first:'',last:t[0]||''}; return {first:t.slice(0,-1).join(' '), last:t[t.length-1]}; }
+function nameFields(idF,idL,first,last){
+  return `<div class="row" style="gap:10px;"><div class="field" style="flex:1;"><label>Prénom</label><input id="${idF}" autocomplete="given-name" value="${esc(first||'')}" placeholder="Jean"></div>
+    <div class="field" style="flex:1;"><label>Nom</label><input id="${idL}" autocomplete="family-name" value="${esc(last||'')}" placeholder="DUPONT"></div></div>
+    <p id="nm-msg" style="color:var(--danger);font-size:12px;min-height:16px;margin:-6px 0 8px;"></p>`;
+}
+function nameFromInputs(idF,idL){
+  const f=document.getElementById(idF).value, l=document.getElementById(idL).value;
+  const err=nameCheck(f,l); const m=document.getElementById('nm-msg'); if(m) m.textContent=err;
+  return err?null:composeName(f,l);
+}
 function showToast(msg){ state.toast=msg; render(); setTimeout(()=>{ state.toast=null; render(); }, 2400); }
 function fmtDate(d){ if(!d) return '—'; const p=(''+d).slice(0,10).split('-'); if(p.length!==3) return d; return `${p[2]}/${p[1]}/${p[0]}`; }
 function fmtDateTime(d){ if(!d) return '—'; const dt=new Date(d); return dt.toLocaleDateString('fr-FR')+' '+dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}); }
@@ -457,6 +483,7 @@ async function selectMembership(m){
   state.billing = null; loadBilling();
   syncAvatarAcrossUnits();
   await Promise.all([loadAccess(), refreshAll()]);
+  if(!isFullName(state.myDisplayName)){ state.nameForced=true; state.view='editName'; render(); return; }
   state.view='home';
   render();
   if(ABO_RETURN && !state.aboShown){ state.aboShown=true; aboReturned(ABO_RETURN); }
@@ -466,6 +493,30 @@ async function openUnitSwitcher(){
   const { data } = await sb.from('unit_members').select('*, units(*)').eq('user_id', state.session.user.id);
   state.memberships = data || [];
   state.view='unitPicker'; render();
+}
+function startEditName(){ state.nameForced=false; state.view='editName'; render(); }
+function renderEditName(){
+  const sp=splitName(state.myDisplayName); const forced=!!state.nameForced;
+  return `<div style="padding:56px 24px 24px;max-width:420px;margin:0 auto;">
+    ${forced?'':`<div class="backlink" onclick="state.view='profile'; render();">‹ Retour au profil</div>`}
+    ${brandMark(56)}
+    <h1 style="font-size:24px;">${forced?'Complète ton profil':'Mon nom'}</h1>
+    <p class="muted" style="margin-bottom:22px;">${forced?'Pour plus de professionnalisme, chaque profil porte désormais un <b>prénom</b> et un <b>nom</b> : ils apparaissent dans le journal, sur les contrôles et sur les fiches de prêt.':'Ton prénom et ton nom apparaissent dans le journal, sur les contrôles et sur les fiches de prêt. Ils sont communs à toutes tes unités.'}</p>
+    ${nameFields('nm-first','nm-last',sp.first,sp.last)}
+    <button class="btn btn-primary" ${state.busy?'disabled':''} onclick="saveMyName()">${state.busy?'<span class="spinner"></span>':'Enregistrer'}</button>
+    ${forced?`<button class="btn btn-ghost" style="margin-top:10px;" onclick="doLogout()">Me déconnecter</button>`:''}
+  </div>`;
+}
+async function saveMyName(){
+  const display = nameFromInputs('nm-first','nm-last'); if(!display) return;
+  state.busy=true; render();
+  const { error } = await sb.from('unit_members').update({display_name:display}).eq('user_id', state.session.user.id);
+  state.busy=false;
+  if(error){ state.view='editName'; render(); const m=document.getElementById('nm-msg'); if(m) m.textContent=error.message; return; }
+  (state.memberships||[]).forEach(m=>{ m.display_name=display; });
+  state.myDisplayName=display; state.nameForced=false;
+  try{ await refreshAll(); }catch(e){}
+  state.view = state.unit ? 'profile' : 'home'; render(); showToast('Nom enregistré');
 }
 function startJoinOrCreateAnother(){ state.setupMode='join'; state.view='unitSetup'; render(); }
 async function refreshAll(){
@@ -647,8 +698,8 @@ function renderResetPassword(){
 function setSetupMode(m){ state.setupMode=m; render(); }
 async function createUnit(){
   const name = document.getElementById('su-name').value.trim();
-  const display = document.getElementById('su-display').value.trim();
-  if(!name || !display){ showToast("Nom d'unité et ton nom sont requis"); return; }
+  if(!name){ showToast("Le nom de l'unité est requis"); return; }
+  const display = nameFromInputs('su-first','su-last'); if(!display) return;
   state.busy=true; render();
   const { data, error } = await sb.rpc('create_unit', { unit_name:name, admin_display_name:display });
   state.busy=false;
@@ -658,8 +709,8 @@ async function createUnit(){
 }
 async function joinUnit(){
   const code = document.getElementById('su-code').value.trim();
-  const display = document.getElementById('su-display2').value.trim();
-  if(!code || !display){ showToast('Code et ton nom sont requis'); return; }
+  if(!code){ showToast("Le code d'invitation est requis"); return; }
+  const display = nameFromInputs('su-first2','su-last2'); if(!display) return;
   state.busy=true; render();
   const { data, error } = await sb.rpc('join_unit_by_code', { code, member_display_name:display });
   state.busy=false;
@@ -1256,7 +1307,7 @@ function newControlDraft(){ controlDraft = {date:new Date().toISOString().slice(
 /* ---------- Render ---------- */
 /* ===== Bouton « retour » du téléphone : revient à l'écran précédent au lieu de fermer l'appli ===== */
 const NAV_FIELDS=['view','detailId','controlDetailId','batchDetailKey','batchDetailType','sheet','filter','groupFilter','famFilter','availFilter','orgId','orgUnitId'];
-const NAV_FREE=['loading','error','auth','resetPassword','mfaChallenge','unitSetup','unitPicker','orgPicker'];
+const NAV_FREE=['loading','error','auth','resetPassword','mfaChallenge','unitSetup','unitPicker','orgPicker','editName'];
 const NAV_FORMS=['addEquip','addControl','loanOut','loanReturn','checkout','batchReturn','batchControl','importPreview','refuseLoan','transferOwnership'];
 let _navCur=null, _navCurView=null, _navBusy=false, _ovSkip=0; const _ovStack=[];
 function navSnap(){ const o={unit:(state.unit&&state.unit.id)||null}; NAV_FIELDS.forEach(k=>{ o[k]=state[k]===undefined?null:state[k]; }); return o; }
@@ -1314,6 +1365,8 @@ function render(){
     html = renderMfaChallenge();
   } else if(state.view==='unitSetup'){
     html = renderUnitSetup();
+  } else if(state.view==='editName'){
+    html = renderEditName();
   } else if(state.view==='unitPicker'){
     html = renderUnitPicker();
   } else if(state.view==='orgPicker'){
@@ -1511,12 +1564,12 @@ function renderUnitSetup(){
     </div>
     ${isCreate ? `
     <div class="field"><label>Nom de l'unité</label><input id="su-name" placeholder="Ex. GRIMP 27, Section alpinisme…"></div>
-    <div class="field"><label>Ton nom</label><input id="su-display" placeholder="Prénom Nom"></div>
+    ${nameFields('su-first','su-last','','')}
     <button class="btn btn-primary" ${state.busy?'disabled':''} onclick="createUnit()">${state.busy?'<span class="spinner"></span>':"Créer l'unité (tu seras administrateur)"}</button>
     ` : `
     ${state.inviteCode?`<div class="card" style="border-color:var(--accent);margin-bottom:14px;"><b>Invitation reçue</b><p class="muted" style="font-size:13px;margin-top:4px;">Le code est déjà renseigné : indique ton nom puis rejoins l'unité.</p></div>`:''}
     <div class="field"><label>Code d'invitation</label><input id="su-code" class="mono" style="text-transform:uppercase;" placeholder="EX : A1B2C3" value="${esc(state.inviteCode||'')}"></div>
-    <div class="field"><label>Ton nom</label><input id="su-display2" placeholder="Prénom Nom"></div>
+    ${nameFields('su-first2','su-last2','','')}
     <button class="btn btn-primary" ${state.busy?'disabled':''} onclick="joinUnit()">${state.busy?'<span class="spinner"></span>':"Rejoindre l'unité"}</button>
     <p class="muted" style="margin-top:14px;">Le code t'est communiqué par l'administrateur de ton unité (visible dans l'onglet Équipe).</p>
     ${state.inviteCode?`<button class="btn btn-ghost" style="margin-top:8px;" onclick="clearInvite().then(()=>loadUnitContext())">Ignorer l'invitation</button>`:''}
@@ -2085,7 +2138,7 @@ function renderProfile(){
   <h2>Profil</h2>
   <div class="card" style="text-align:center;">
     ${state.myAvatarUrl?`<img src="${imgSrc(state.myAvatarUrl)}" onerror="imgFallback(this)" style="width:88px;height:88px;border-radius:50%;object-fit:cover;margin-bottom:10px;">`:`<div class="user-dot" style="width:88px;height:88px;font-size:28px;margin:0 auto 10px;">${esc(initials(state.myDisplayName))}</div>`}
-    <div style="font-weight:600;font-size:16px;">${esc(state.myDisplayName)}</div>
+    <div style="font-weight:600;font-size:16px;">${esc(state.myDisplayName)} <a onclick="startEditName()" title="Modifier mon nom" style="cursor:pointer;color:var(--accent);font-size:13px;font-weight:400;">✏️</a></div>
     <div class="muted" style="font-size:12px;">${esc(ROLES[state.role].label)} · ${esc(state.unit.name)}</div>
     <button class="btn btn-ghost" style="width:auto;margin-top:10px;" onclick="pickAvatarPhoto()">Changer la photo</button>
   </div>
